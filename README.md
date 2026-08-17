@@ -7,6 +7,7 @@ Aplikasi ringan Next.js untuk Vercel dengan dua peran: **admin** dan **user**, s
 - Admin membuat proyek dan menugaskannya ke satu user atau seluruh user (default).
 - User hanya melihat proyek yang ditugaskan kepadanya, lalu menandai selesai dengan tanggal maksimal 30 hari ke belakang.
 - Admin melihat rekapan dan mengunduh `.xlsx` dengan header: `Nama`, `Nama proyek`, `Project ID`, `Tanggal selesai`.
+- Admin dapat mengurutkan rekapan berdasarkan nama atau Project ID, melihat jam pencatatan, serta mengelola proyek dan user.
 - Supabase Auth untuk akun dan Supabase Postgres untuk data.
 - Vercel Cron harian menjalankan query aman agar proyek Supabase Free tetap aktif.
 

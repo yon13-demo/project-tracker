@@ -37,10 +37,20 @@ create table public.project_completions (
   unique(project_id, user_id)
 );
 
-create function public.handle_new_user() returns trigger language plpgsql security definer set search_path = public as $$
+-- Trigger ini membuat profil setiap kali akun Auth baru dibuat.
+-- SECURITY DEFINER penting agar trigger Auth dapat menulis ke tabel yang memakai RLS.
+drop trigger if exists on_auth_user_created on auth.users;
+create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path = '' as $$
 begin
-  insert into public.profiles (id, full_name) values (new.id, coalesce(new.raw_user_meta_data->>'full_name', new.email, ''));
+  insert into public.profiles (id, full_name)
+  values (
+    new.id,
+    coalesce(nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''), split_part(new.email, '@', 1), 'New user')
+  );
   return new;
+exception when others then
+  raise log 'Could not create profile for user %: %', new.id, sqlerrm;
+  raise;
 end;
 $$;
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
@@ -56,6 +66,7 @@ $$;
 
 create policy "authenticated users read profiles" on public.profiles for select to authenticated using (true);
 create policy "users update own profile" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid() and role = (select role from public.profiles where id = auth.uid()));
+create policy "admins manage profiles" on public.profiles for all to authenticated using (public.is_admin()) with check (public.is_admin());
 create policy "admins manage projects" on public.projects for all to authenticated using (public.is_admin()) with check (public.is_admin());
 create policy "users read projects" on public.projects for select to authenticated using (true);
 create policy "admins manage assignments" on public.project_assignments for all to authenticated using (public.is_admin()) with check (public.is_admin());
