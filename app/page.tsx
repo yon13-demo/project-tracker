@@ -473,7 +473,24 @@ export default function Home() {
         />
       )}
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
+      <SiteFooter />
     </main>
+  );
+}
+
+// ─── Footer ─────────────────────────────────────────────────────────────────
+function SiteFooter() {
+  return (
+    <footer className="site-footer">
+      <div className="footer-contact">
+        <span className="footer-label">Weaver Support</span>
+        <a href="mailto:support@leonxlab.digital">support@leonxlab.digital</a>
+      </div>
+      <div className="footer-contact">
+        <span className="footer-label">Fix Error</span>
+        <a href="mailto:mailto@leonxlab.app">mailto@leonxlab.app</a>
+      </div>
+    </footer>
   );
 }
 
@@ -525,6 +542,7 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any)
           </p>
         )}
       </section>
+      <SiteFooter />
     </main>
   );
 }
@@ -996,22 +1014,16 @@ function AdminView({
               </tr>
             </thead>
             <tbody>
-              {users.map((u: Profile) => {
-                const protected_ = u.email ? isProtectedDomain(u.email) : false;
+              {users.filter((u: Profile) => !(u.email && isProtectedDomain(u.email))).map((u: Profile) => {
                 const isSelf = u.id === currentProfile?.id;
                 return (
                   <tr key={u.id}>
                     <td>{u.full_name}</td>
                     <td style={{ color: 'var(--muted)', fontSize: 12 }}>
                       {u.email || '—'}
-                      {protected_ && (
-                        <span title={t.protectedDomain} style={{ marginLeft: 6, color: '#f59e0b' }}>
-                          <Shield size={11} style={{ display: 'inline' }} />
-                        </span>
-                      )}
                     </td>
                     <td>
-                      {protected_ || isSelf ? (
+                      {isSelf ? (
                         <span className={`role-badge ${u.role}`}>{u.role}</span>
                       ) : (
                         <select

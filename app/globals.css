@@ -406,6 +406,18 @@ tbody tr:hover { background: #fafbff; }
   color: #92400e; background: #fffbeb; font-size: 13px;
 }
 
+/* Footer */
+.site-footer {
+  margin-top: 32px; padding: 20px 0 4px;
+  border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 8px 28px; justify-content: center;
+  font-size: 12px;
+}
+.footer-contact { display: flex; align-items: center; gap: 6px; }
+.footer-label { font-weight: 600; color: var(--muted); }
+.footer-contact a { color: var(--brand); text-decoration: none; }
+.footer-contact a:hover { text-decoration: underline; }
+
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 680px) {
   .shell { padding: 0 12px 60px; }
