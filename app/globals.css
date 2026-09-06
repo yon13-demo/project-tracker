@@ -285,6 +285,22 @@ p { margin: 0; color: var(--muted); }
 .modal-footer-right { display: flex; gap: 8px; }
 
 .leave-confirm { padding: 24px 22px; text-align: center; display: grid; gap: 10px; place-items: center; }
+
+/* Alert Popup */
+.alert-modal { width: min(400px, 100%); }
+.alert-modal-body {
+  padding: 26px 22px 20px; text-align: center;
+  display: grid; gap: 12px; place-items: center;
+}
+.alert-modal-icon {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--warn-soft); color: var(--warn);
+}
+.alert-modal-body p { font-size: 14px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; }
+.alert-modal-footer { justify-content: center; background: transparent; border-top: none; padding-top: 0; }
+.alert-modal-footer .btn-primary { min-width: 96px; justify-content: center; }
+
 .entry-list { padding: 16px 22px; display: grid; gap: 12px; }
 .entry-row {
   display: flex; gap: 10px; align-items: flex-end;

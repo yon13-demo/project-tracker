@@ -8,7 +8,7 @@ import {
   ToggleLeft, ToggleRight, Clock, Info, X, Shield, ScrollText,
   Settings, UserCog, AtSign
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { supabase } from '@/lib/supabase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -30,6 +30,15 @@ type AdminLog = {
 type AdminSettings = { allow_signup: boolean; login_domain: string };
 
 const PROTECTED_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
+
+// ─── Global alert popup ─────────────────────────────────────────────────────
+// Lets any function (even inside child components) trigger the popup without
+// prop-drilling, the same way window.alert() could be called from anywhere.
+let alertSetter: ((message: string) => void) | null = null;
+function showAlert(message: string) {
+  if (alertSetter) alertSetter(message);
+  else if (typeof window !== 'undefined') window.alert(message);
+}
 
 // ─── i18n ─────────────────────────────────────────────────────────────────────
 const text = {
@@ -165,6 +174,12 @@ export default function Home() {
   const [checkHoursDetail, setCheckHoursDetail] = useState<Profile | null>(null);
   const [showAdminLogs, setShowAdminLogs] = useState(false);
   const [showAdminSettings, setShowAdminSettings] = useState(false);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    alertSetter = setAlertMessage;
+    return () => { alertSetter = null; };
+  }, []);
 
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
@@ -244,8 +259,8 @@ export default function Home() {
     const result = authMode === 'in'
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password, options: { data: { full_name } } });
-    if (result.error) alert(result.error.message);
-    else if (authMode === 'up') alert(lang === 'id' ? 'Akun dibuat.' : 'Account created.');
+    if (result.error) showAlert(result.error.message);
+    else if (authMode === 'up') showAlert(lang === 'id' ? 'Akun dibuat.' : 'Account created.');
   }
 
   async function createProjectFn(e: React.FormEvent<HTMLFormElement>) {
@@ -255,7 +270,7 @@ export default function Home() {
     const { data, error } = await supabase.from('projects').insert({
       name: f.get('name'), project_code: f.get('code'), description: f.get('description'), created_by: profile.id
     }).select().single();
-    if (error || !data) return alert(error?.message);
+    if (error || !data) return showAlert(error?.message || 'Error');
     const target = String(f.get('user_id') || '');
     await supabase.from('project_assignments').insert({ project_id: data.id, assigned_to: target || null });
     setCreateOpen(false); load();
@@ -268,7 +283,7 @@ export default function Home() {
     const { error } = await supabase.from('projects').update({
       name: f.get('name'), project_code: f.get('code'), description: f.get('description')
     }).eq('id', editProject.id);
-    if (error) alert(error.message); else { setEditProject(null); load(); }
+    if (error) showAlert(error.message); else { setEditProject(null); load(); }
   }
 
   async function toggleProjectActive(project: Project) {
@@ -277,13 +292,13 @@ export default function Home() {
       is_active: newActive,
       inactive_from: newActive ? null : todayStr()
     }).eq('id', project.id);
-    if (error) alert(error.message); else load();
+    if (error) showAlert(error.message); else load();
   }
 
   async function deleteProjectFn(project: Project) {
     if (!confirm(`${t.delete} ${project.name}?`)) return;
     const { error } = await supabase.from('projects').delete().eq('id', project.id);
-    if (error) alert(error.message); else load();
+    if (error) showAlert(error.message); else load();
   }
 
   async function adminUser(e: React.FormEvent<HTMLFormElement>) {
@@ -299,24 +314,24 @@ export default function Home() {
       })
     });
     const body = await response.json();
-    if (!response.ok) alert(body.error || 'Error'); else { setUserOpen(null); load(); }
+    if (!response.ok) showAlert(body.error || 'Error'); else { setUserOpen(null); load(); }
   }
 
   async function deleteUser(user: Profile) {
     if (user.email && isProtectedDomain(user.email)) {
-      alert(lang === 'id' ? `Akun dengan domain @${user.email.split('@')[1]} tidak dapat dihapus.` : `Accounts with @${user.email.split('@')[1]} domain cannot be deleted.`);
+      showAlert(lang === 'id' ? `Akun dengan domain @${user.email.split('@')[1]} tidak dapat dihapus.` : `Accounts with @${user.email.split('@')[1]} domain cannot be deleted.`);
       return;
     }
     if (!confirm(`${t.delete} ${user.full_name}?`)) return;
     const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch(`/api/admin/users?id=${user.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session?.access_token}` } });
     const body = await response.json();
-    if (!response.ok) alert(body.error || 'Error'); else load();
+    if (!response.ok) showAlert(body.error || 'Error'); else load();
   }
 
   async function updateUserRole(user: Profile, newRole: 'admin' | 'user') {
     if (user.email && isProtectedDomain(user.email)) {
-      alert(lang === 'id' ? `Role akun @${user.email.split('@')[1]} tidak dapat diubah.` : `Role of @${user.email.split('@')[1]} accounts cannot be changed.`);
+      showAlert(lang === 'id' ? `Role akun @${user.email.split('@')[1]} tidak dapat diubah.` : `Role of @${user.email.split('@')[1]} accounts cannot be changed.`);
       return;
     }
     const { data: { session } } = await supabase.auth.getSession();
@@ -326,7 +341,7 @@ export default function Home() {
       body: JSON.stringify({ id: user.id, role: newRole }),
     });
     const body = await res.json();
-    if (!res.ok) alert(body.error || 'Error'); else load();
+    if (!res.ok) showAlert(body.error || 'Error'); else load();
   }
 
   async function saveSettings(settings: Partial<AdminSettings>) {
@@ -341,31 +356,56 @@ export default function Home() {
     });
     if (res.ok) {
       setAdminSettings(prev => ({ ...prev, ...settings }));
-      alert(t.settingsSaved);
+      showAlert(t.settingsSaved);
     } else {
       const b = await res.json();
-      alert(b.error || 'Error');
+      showAlert(b.error || 'Error');
     }
   }
 
-  function exportExcel() {
-    const rows = workLogs
-      .filter(wl => !wl.is_leave)
-      .filter(wl => {
-        const key = `${wl.profiles?.full_name} ${wl.projects?.name} ${wl.projects?.project_code}`.toLowerCase();
-        return key.includes(query.toLowerCase());
-      })
-      .map(r => ({
-        [t.user]: r.profiles?.full_name || '',
-        [t.namaProyek]: r.projects?.name || '',
-        [t.nomorProyek]: r.projects?.project_code || '',
-        [t.tanggal]: r.log_date,
-        [t.jamKerja]: r.hours ?? 0,
-      }));
-    const sheet = XLSX.utils.json_to_sheet(rows);
-    const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, sheet, t.records);
-    XLSX.writeFile(book, `rekapan-${todayStr()}.xlsx`);
+  async function exportExcel() {
+    const rows = workLogs.filter(wl => {
+      const key = `${wl.profiles?.full_name} ${wl.projects?.name} ${wl.projects?.project_code}`.toLowerCase();
+      return key.includes(query.toLowerCase());
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(t.records);
+
+    sheet.columns = [
+      { header: t.user, key: 'user', width: 22 },
+      { header: t.namaProyek, key: 'project', width: 24 },
+      { header: t.nomorProyek, key: 'code', width: 18 },
+      { header: t.tanggal, key: 'date', width: 14 },
+      { header: t.jamKerja, key: 'hours', width: 12 },
+      { header: t.leave, key: 'leave', width: 12 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+
+    rows.forEach(r => {
+      const row = sheet.addRow({
+        user: r.profiles?.full_name || '',
+        project: r.projects?.name || '',
+        code: r.projects?.project_code || '',
+        date: r.log_date,
+        hours: r.is_leave ? '' : (r.hours ?? 0),
+        leave: r.is_leave ? t.leave : '',
+      });
+      if (r.is_leave) {
+        row.getCell('leave').font = { color: { argb: 'FFFF0000' } };
+      }
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rekapan-${todayStr()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const visibleProjects = useMemo(() => {
@@ -375,10 +415,13 @@ export default function Home() {
   if (!configured) return <main className="shell"><div className="notice">{t.setup}</div></main>;
   if (loading) return <main className="shell"><p className="loading-text">{t.loading}</p></main>;
   if (!profile) return (
-    <Auth
-      lang={lang} setLang={setLang} t={t} mode={authMode} setMode={setAuthMode}
-      onSubmit={authenticate} adminSettings={adminSettings}
-    />
+    <>
+      <Auth
+        lang={lang} setLang={setLang} t={t} mode={authMode} setMode={setAuthMode}
+        onSubmit={authenticate} adminSettings={adminSettings}
+      />
+      <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
+    </>
   );
   const isAdmin = profile.role === 'admin';
 
@@ -429,6 +472,7 @@ export default function Home() {
           loginDomain={adminSettings.login_domain}
         />
       )}
+      <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
     </main>
   );
 }
@@ -548,7 +592,7 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
     await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', selectedDate);
     const { error } = await supabase.from('work_logs').insert({ user_id: profile.id, log_date: selectedDate, is_leave: true });
     setSaving(false);
-    if (error) alert(error.message);
+    if (error) showAlert(error.message);
     else { setSelectedDate(null); onRefresh(); }
   }
 
@@ -556,9 +600,9 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
     if (!selectedDate) return;
     if (isLeaveMode) return handleMarkLeave();
     for (const e of dateEntries) {
-      if (!e.project_id) { alert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
+      if (!e.project_id) { showAlert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
       if (!e.hours || isNaN(Number(e.hours)) || Number(e.hours) <= 0) {
-        alert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return;
+        showAlert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return;
       }
     }
     setSaving(true);
@@ -569,7 +613,7 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
     }));
     const { error } = await supabase.from('work_logs').insert(inserts);
     setSaving(false);
-    if (error) alert(error.message);
+    if (error) showAlert(error.message);
     else { setSelectedDate(null); onRefresh(); }
   }
 
@@ -807,28 +851,6 @@ function AdminView({
         </div>
       </div>
 
-      {/* Admin tools row */}
-      <div className="admin-section" style={{ paddingBottom: 0 }}>
-        <div className="section-header" style={{ marginBottom: 0 }}>
-          <h2 style={{ fontSize: 14, color: 'var(--muted)' }}>{t.adminSettings}</h2>
-          <div className="section-actions">
-            <button className="btn-secondary" onClick={() => setShowAdminSettings(!showAdminSettings)}>
-              <Settings size={14} /> {t.adminSettings}
-            </button>
-            <button className="btn-secondary" onClick={() => setShowAdminLogs(!showAdminLogs)}>
-              <ScrollText size={14} /> {t.adminLogs}
-            </button>
-          </div>
-        </div>
-
-        {showAdminSettings && (
-          <AdminSettingsPanel t={t} lang={lang} adminSettings={adminSettings} onSave={onSaveSettings} />
-        )}
-        {showAdminLogs && (
-          <AdminLogsPanel t={t} lang={lang} />
-        )}
-      </div>
-
       {/* Records */}
       <div className="admin-section">
         <div className="section-header">
@@ -1016,6 +1038,35 @@ function AdminView({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Admin tools */}
+      <div className="admin-section">
+        <div className="section-header">
+          <h2 style={{ fontSize: 14, color: 'var(--muted)' }}>{t.adminSettings}</h2>
+          <div className="section-actions">
+            <button className="btn-secondary" onClick={() => setShowAdminSettings(!showAdminSettings)}>
+              <Settings size={14} /> {t.adminSettings}
+            </button>
+            <button className="btn-secondary" onClick={() => setShowAdminLogs(!showAdminLogs)}>
+              <ScrollText size={14} /> {t.adminLogs}
+            </button>
+          </div>
+        </div>
+
+        {showAdminSettings && (
+          <AdminSettingsPanel t={t} lang={lang} adminSettings={adminSettings} onSave={onSaveSettings} />
+        )}
+        {showAdminLogs && (
+          <AdminLogsPanel t={t} lang={lang} />
+        )}
+        {!showAdminSettings && !showAdminLogs && (
+          <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
+            {lang === 'id'
+              ? 'Klik tombol di atas untuk melihat pengaturan atau log admin.'
+              : 'Click a button above to view admin settings or logs.'}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -1308,6 +1359,24 @@ function UserModal({ t, lang, user, onClose, onSubmit, loginDomain }: any) {
             </div>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Alert Popup (replaces window.alert) ───────────────────────────────────
+function AlertModal({ message, onClose }: { message: string | null; onClose: () => void }) {
+  if (!message) return null;
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal alert-modal">
+        <div className="alert-modal-body">
+          <span className="alert-modal-icon"><AlertCircle size={24} /></span>
+          <p>{message}</p>
+        </div>
+        <div className="modal-footer alert-modal-footer">
+          <button className="btn-primary" onClick={onClose} autoFocus>OK</button>
+        </div>
       </div>
     </div>
   );
