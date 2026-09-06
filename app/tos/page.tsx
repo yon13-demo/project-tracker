@@ -134,7 +134,7 @@ export default function TermsOfService() {
       </div>
 
       <footer className="site-footer" style={{ marginTop: 40 }}>
-        <div className="footer-copyright">© 2026 Weaver — Leonx Lab</div>
+        <div className="footer-copyright">© 2026 Weaver</div>
       </footer>
     </main>
   );

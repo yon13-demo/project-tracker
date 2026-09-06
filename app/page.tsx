@@ -493,7 +493,7 @@ export default function Home() {
 function SiteFooter({ t }: { t?: any }) {
   return (
     <footer className="site-footer">
-      <div className="footer-copyright">© 2026 Weaver — Leonx Lab</div>
+      <div className="footer-copyright">© 2026 Weaver</div>
       <div className="footer-support">
         <span className="footer-support-icon"><Mail size={13} /></span>
         <span className="footer-support-label">Support</span>
