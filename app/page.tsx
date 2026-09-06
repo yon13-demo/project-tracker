@@ -6,7 +6,7 @@ import {
   Globe2, LogOut, Pencil, Plus, Trash2, UserPlus, Users,
   Download, FolderPlus, AlertCircle, ChevronDown, Check,
   ToggleLeft, ToggleRight, Clock, Info, X, Shield, ScrollText,
-  Settings, UserCog, AtSign
+  Settings, UserCog, AtSign, Mail
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { supabase } from '@/lib/supabase';
@@ -482,12 +482,12 @@ export default function Home() {
 function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div className="footer-contact">
-        <span className="footer-label">Weaver Support</span>
+      <div className="footer-copyright">© 2026 Weaver</div>
+      <div className="footer-support">
+        <span className="footer-support-icon"><Mail size={13} /></span>
+        <span className="footer-support-label">Weaver Support</span>
         <a href="mailto:support@leonxlab.digital">support@leonxlab.digital</a>
-      </div>
-      <div className="footer-contact">
-        <span className="footer-label">Fix Error</span>
+        <span className="footer-dot" aria-hidden="true">•</span>
         <a href="mailto:mailto@leonxlab.app">mailto@leonxlab.app</a>
       </div>
     </footer>
@@ -663,7 +663,9 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
                       {isToday && <span className="today-dot" />}
                       <span className="date-label">{formatDateDisplay(date, lang).replace('\n', ' ')}</span>
                     </td>
-                    <td colSpan={3}><span className="badge-leave">{t.leaveDay}</span></td>
+                    <td className="empty-row-hint">—</td>
+                    <td className="empty-row-hint">—</td>
+                    <td><span className="badge-leave">{t.leaveDay}</span></td>
                     <td><button className="btn-action" onClick={() => openDate(date)}><Pencil size={14} /></button></td>
                   </tr>
                 );
