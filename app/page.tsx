@@ -5,14 +5,15 @@ import Image from 'next/image';
 import {
   Globe2, LogOut, Pencil, Plus, Trash2, UserPlus, Users,
   Download, FolderPlus, AlertCircle, ChevronDown, Check,
-  ToggleLeft, ToggleRight, Clock, Info, X
+  ToggleLeft, ToggleRight, Clock, Info, X, Shield, ScrollText,
+  Settings, UserCog, AtSign
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Lang = 'id' | 'en';
-type Profile = { id: string; full_name: string; role: 'admin' | 'user' };
+type Profile = { id: string; full_name: string; role: 'admin' | 'user'; email?: string };
 type Project = { id: string; project_code: string; name: string; description: string; is_active: boolean; inactive_from: string | null };
 type WorkLog = {
   id: string; user_id: string; log_date: string;
@@ -21,7 +22,14 @@ type WorkLog = {
   projects?: { name: string; project_code: string } | null;
 };
 type DayEntry = { project_id: string; project_name: string; project_code: string; hours: number };
-type DayData = { date: string; isLeave: boolean; entries: DayEntry[] };
+type AdminLog = {
+  id: string; action: string; details: any; created_at: string;
+  admin?: { full_name: string } | null;
+  target?: { full_name: string } | null;
+};
+type AdminSettings = { allow_signup: boolean; login_domain: string };
+
+const PROTECTED_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 
 // ─── i18n ─────────────────────────────────────────────────────────────────────
 const text = {
@@ -39,7 +47,7 @@ const text = {
     projectList: 'Daftar Proyek', userList: 'Daftar Karyawan', edit: 'Edit',
     delete: 'Hapus', addUser: 'Tambah karyawan', actions: 'Aksi',
     createAccount: 'Buat akun baru', name: 'Nama lengkap',
-    authHint: 'Gunakan email dan kata sandi untuk melanjutkan.',
+    authHint: 'Masukkan username untuk melanjutkan.',
     loading: 'Memuat…', setup: 'Tambahkan variabel Supabase terlebih dahulu.',
     active: 'Aktif', inactive: 'Nonaktif', activate: 'Aktifkan', deactivate: 'Nonaktifkan',
     leave: 'Cuti', addProject: 'Tambah Proyek', inputHours: 'Jam kerja',
@@ -51,6 +59,10 @@ const text = {
     kodePrjPlaceholder: 'Kode proyek (contoh: PRJ-001)',
     tanggal: 'Tanggal', namaProyek: 'Nama Proyek', nomorProyek: 'Nomor Proyek',
     jamKerja: 'Jam Kerja', jamKerjaHeader: 'Jam Kerja',
+    adminLogs: 'Log Admin', role: 'Role', username: 'Username',
+    allowSignup: 'Izinkan buat akun', loginDomain: 'Domain login default',
+    adminSettings: 'Pengaturan Admin', changeRole: 'Ubah Role',
+    protectedDomain: 'Domain ini terlindungi', settingsSaved: 'Pengaturan disimpan.',
   },
   en: {
     app: 'Weaver', login: 'Sign in', email: 'Email', password: 'Password',
@@ -66,7 +78,7 @@ const text = {
     projectList: 'Project List', userList: 'Employees', edit: 'Edit',
     delete: 'Delete', addUser: 'Add employee', actions: 'Actions',
     createAccount: 'Create a new account', name: 'Full name',
-    authHint: 'Use your email and password to continue.',
+    authHint: 'Enter your username to continue.',
     loading: 'Loading…', setup: 'Add your Supabase environment variables first.',
     active: 'Active', inactive: 'Inactive', activate: 'Activate', deactivate: 'Deactivate',
     leave: 'Leave', addProject: 'Add Project', inputHours: 'Work hours',
@@ -78,6 +90,10 @@ const text = {
     kodePrjPlaceholder: 'Project code (e.g. PRJ-001)',
     tanggal: 'Date', namaProyek: 'Project Name', nomorProyek: 'Project Number',
     jamKerja: 'Work Hours', jamKerjaHeader: 'Work Hours',
+    adminLogs: 'Admin Logs', role: 'Role', username: 'Username',
+    allowSignup: 'Allow account creation', loginDomain: 'Default login domain',
+    adminSettings: 'Admin Settings', changeRole: 'Change Role',
+    protectedDomain: 'Domain is protected', settingsSaved: 'Settings saved.',
   }
 } as const;
 
@@ -99,6 +115,33 @@ function formatDateDisplay(dateStr: string, lang: Lang): string {
   if (dateStr === today) return lang === 'id' ? `Hari ini\n${formatted}` : `Today\n${formatted}`;
   return formatted;
 }
+function isProtectedDomain(email: string) {
+  const domain = email?.split('@')[1] || '';
+  return PROTECTED_DOMAINS.includes(domain);
+}
+function formatLogAction(action: string, details: any, lang: Lang): string {
+  const map: Record<string, string> = {
+    CREATE_USER: lang === 'id' ? 'Buat akun' : 'Create user',
+    UPDATE_USER: lang === 'id' ? 'Edit akun' : 'Edit user',
+    DELETE_USER: lang === 'id' ? 'Hapus akun' : 'Delete user',
+    UPDATE_ROLE: lang === 'id' ? 'Ubah role' : 'Change role',
+    TOGGLE_SIGNUP: lang === 'id' ? 'Toggle buat akun' : 'Toggle signup',
+    SET_DOMAIN: lang === 'id' ? 'Set domain login' : 'Set login domain',
+  };
+  let base = map[action] || action;
+  if (action === 'UPDATE_ROLE' && details) {
+    base += `: ${details.target_name} (${details.old_role} → ${details.new_role})`;
+  } else if (action === 'CREATE_USER' && details) {
+    base += `: ${details.full_name} <${details.email}>`;
+  } else if (action === 'DELETE_USER' && details) {
+    base += `: ${details.full_name || details.email}`;
+  } else if (action === 'TOGGLE_SIGNUP' && details) {
+    base += `: ${details.allow_signup ? 'ON' : 'OFF'}`;
+  } else if (action === 'SET_DOMAIN' && details) {
+    base += `: ${details.login_domain}`;
+  }
+  return base;
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Home() {
@@ -110,6 +153,7 @@ export default function Home() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [authMode, setAuthMode] = useState<'in' | 'up'>('in');
+  const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com' });
 
   // Admin modals
   const [createOpen, setCreateOpen] = useState(false);
@@ -119,8 +163,24 @@ export default function Home() {
   const [sortBy, setSortBy] = useState<'name' | 'date'>('date');
   const [showCheckHours, setShowCheckHours] = useState(false);
   const [checkHoursDetail, setCheckHoursDetail] = useState<Profile | null>(null);
+  const [showAdminLogs, setShowAdminLogs] = useState(false);
+  const [showAdminSettings, setShowAdminSettings] = useState(false);
 
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
+  // Load admin settings (public endpoint)
+  const loadSettings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/settings');
+      if (res.ok) {
+        const data = await res.json();
+        setAdminSettings({
+          allow_signup: data.allow_signup === 'true',
+          login_domain: data.login_domain || 'company.com',
+        });
+      }
+    } catch {}
+  }, []);
 
   const load = useCallback(async () => {
     if (!configured) return setLoading(false);
@@ -128,13 +188,29 @@ export default function Home() {
     if (!user) { setProfile(null); setLoading(false); return; }
     const { data: own } = await supabase.from('profiles').select('id,full_name,role').eq('id', user.id).single();
     if (!own) return setLoading(false);
-    setProfile(own as Profile);
+    // Attach email for protected domain detection
+    setProfile({ ...(own as Profile), email: user.email });
 
     const [{ data: allProjects }, { data: logs }, { data: allUsers }] = await Promise.all([
       supabase.from('projects').select('id,project_code,name,description,is_active,inactive_from').order('created_at', { ascending: false }),
       supabase.from('work_logs').select('id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)').order('log_date', { ascending: false }),
       own.role === 'admin' ? supabase.from('profiles').select('id,full_name,role').order('full_name') : Promise.resolve({ data: [] })
     ]);
+
+    // For admin, enrich users with emails
+    let enrichedUsers: Profile[] = (allUsers || []) as Profile[];
+    if (own.role === 'admin') {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/admin/users-list', {
+          headers: { Authorization: `Bearer ${session?.access_token}` }
+        });
+        if (res.ok) {
+          const emailMap: Record<string, string> = await res.json();
+          enrichedUsers = enrichedUsers.map(u => ({ ...u, email: emailMap[u.id] || '' }));
+        }
+      } catch {}
+    }
 
     const normalized = (logs || []).map((r: any) => ({
       ...r,
@@ -144,20 +220,27 @@ export default function Home() {
 
     setProjects((allProjects || []) as Project[]);
     setWorkLogs(normalized as WorkLog[]);
-    setUsers((allUsers || []) as Profile[]);
+    setUsers(enrichedUsers);
     setLoading(false);
   }, [configured]);
 
   useEffect(() => {
+    loadSettings();
     load();
     const { data } = supabase.auth.onAuthStateChange(() => load());
     return () => data.subscription.unsubscribe();
-  }, [load]);
+  }, [load, loadSettings]);
 
   async function authenticate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
-    const email = String(f.get('email')), password = String(f.get('password')), full_name = String(f.get('full_name') || '');
+    const username = String(f.get('username') || '').trim();
+    const password = String(f.get('password'));
+    const full_name = String(f.get('full_name') || '');
+    const email = authMode === 'in'
+      ? `${username}@${adminSettings.login_domain}`
+      : String(f.get('email') || '');
+
     const result = authMode === 'in'
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password, options: { data: { full_name } } });
@@ -220,6 +303,10 @@ export default function Home() {
   }
 
   async function deleteUser(user: Profile) {
+    if (user.email && isProtectedDomain(user.email)) {
+      alert(lang === 'id' ? `Akun dengan domain @${user.email.split('@')[1]} tidak dapat dihapus.` : `Accounts with @${user.email.split('@')[1]} domain cannot be deleted.`);
+      return;
+    }
     if (!confirm(`${t.delete} ${user.full_name}?`)) return;
     const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch(`/api/admin/users?id=${user.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session?.access_token}` } });
@@ -227,8 +314,41 @@ export default function Home() {
     if (!response.ok) alert(body.error || 'Error'); else load();
   }
 
+  async function updateUserRole(user: Profile, newRole: 'admin' | 'user') {
+    if (user.email && isProtectedDomain(user.email)) {
+      alert(lang === 'id' ? `Role akun @${user.email.split('@')[1]} tidak dapat diubah.` : `Role of @${user.email.split('@')[1]} accounts cannot be changed.`);
+      return;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/admin/role', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ id: user.id, role: newRole }),
+    });
+    const body = await res.json();
+    if (!res.ok) alert(body.error || 'Error'); else load();
+  }
+
+  async function saveSettings(settings: Partial<AdminSettings>) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const body: any = {};
+    if (settings.allow_signup !== undefined) body.allow_signup = settings.allow_signup;
+    if (settings.login_domain !== undefined) body.login_domain = settings.login_domain;
+    const res = await fetch('/api/admin/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      setAdminSettings(prev => ({ ...prev, ...settings }));
+      alert(t.settingsSaved);
+    } else {
+      const b = await res.json();
+      alert(b.error || 'Error');
+    }
+  }
+
   function exportExcel() {
-    // Flat rows for Excel (no merge - one row per work log)
     const rows = workLogs
       .filter(wl => !wl.is_leave)
       .filter(wl => {
@@ -248,18 +368,18 @@ export default function Home() {
     XLSX.writeFile(book, `rekapan-${todayStr()}.xlsx`);
   }
 
-  // Compute visible projects for user (active only, or inactive_from > today's perspective)
   const visibleProjects = useMemo(() => {
-    return projects.filter(p => {
-      if (p.is_active) return true;
-      // If inactive, check if inactive_from is in the future (shouldn't happen) or today
-      return false;
-    });
+    return projects.filter(p => p.is_active);
   }, [projects]);
 
   if (!configured) return <main className="shell"><div className="notice">{t.setup}</div></main>;
   if (loading) return <main className="shell"><p className="loading-text">{t.loading}</p></main>;
-  if (!profile) return <Auth lang={lang} setLang={setLang} t={t} mode={authMode} setMode={setAuthMode} onSubmit={authenticate} />;
+  if (!profile) return (
+    <Auth
+      lang={lang} setLang={setLang} t={t} mode={authMode} setMode={setAuthMode}
+      onSubmit={authenticate} adminSettings={adminSettings}
+    />
+  );
   const isAdmin = profile.role === 'admin';
 
   return (
@@ -288,8 +408,13 @@ export default function Home() {
           onExport={exportExcel} onCreate={() => setCreateOpen(true)}
           onEdit={setEditProject} onDelete={deleteProjectFn} onToggleActive={toggleProjectActive}
           onAddUser={() => setUserOpen('new')} onEditUser={setUserOpen} onDeleteUser={deleteUser}
+          onUpdateRole={updateUserRole}
           showCheckHours={showCheckHours} setShowCheckHours={setShowCheckHours}
           checkHoursDetail={checkHoursDetail} setCheckHoursDetail={setCheckHoursDetail}
+          showAdminLogs={showAdminLogs} setShowAdminLogs={setShowAdminLogs}
+          showAdminSettings={showAdminSettings} setShowAdminSettings={setShowAdminSettings}
+          adminSettings={adminSettings} onSaveSettings={saveSettings}
+          currentProfile={profile}
         />
       ) : (
         <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} onRefresh={load} />
@@ -297,13 +422,19 @@ export default function Home() {
 
       {createOpen && <ProjectModal t={t} users={users} onClose={() => setCreateOpen(false)} onSubmit={createProjectFn} />}
       {editProject && <ProjectModal t={t} users={users} project={editProject} onClose={() => setEditProject(null)} onSubmit={updateProjectFn} />}
-      {userOpen && <UserModal t={t} user={userOpen === 'new' ? undefined : userOpen as Profile} onClose={() => setUserOpen(null)} onSubmit={adminUser} />}
+      {userOpen && (
+        <UserModal
+          t={t} lang={lang} user={userOpen === 'new' ? undefined : userOpen as Profile}
+          onClose={() => setUserOpen(null)} onSubmit={adminUser}
+          loginDomain={adminSettings.login_domain}
+        />
+      )}
     </main>
   );
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
-function Auth({ lang, setLang, t, mode, setMode, onSubmit }: any) {
+function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any) {
   return (
     <main className="shell auth-shell">
       <header className="topbar">
@@ -322,15 +453,33 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit }: any) {
         <p className="auth-hint">{t.authHint}</p>
         <form onSubmit={onSubmit}>
           {mode === 'up' && <div className="field"><label>{t.name}</label><input required name="full_name" /></div>}
-          <div className="field"><label>{t.email}</label><input required name="email" type="email" /></div>
+          {mode === 'up' ? (
+            <div className="field"><label>{t.email}</label><input required name="email" type="email" /></div>
+          ) : (
+            <div className="field">
+              <label>{t.username || 'Username'}</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  required name="username" placeholder={lang === 'id' ? 'nama.anda' : 'your.name'}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
+                  @{adminSettings.login_domain}
+                </span>
+              </div>
+            </div>
+          )}
           <div className="field"><label>{t.password}</label><input required name="password" type="password" minLength={6} /></div>
           <button className="btn-primary full-width" type="submit">{mode === 'in' ? t.signIn : t.signUp}</button>
         </form>
-        <p className="auth-toggle">
-          <button className="btn-ghost" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
-            {mode === 'in' ? t.signUp : t.signIn}
-          </button>
-        </p>
+        {/* Toggle signup hanya muncul kalau allow_signup aktif */}
+        {adminSettings.allow_signup && (
+          <p className="auth-toggle">
+            <button className="btn-ghost" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
+              {mode === 'in' ? t.signUp : t.signIn}
+            </button>
+          </p>
+        )}
       </section>
     </main>
   );
@@ -341,7 +490,6 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
   t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; onRefresh: () => void;
 }) {
   const days = getLast45Days();
-  // Build day map from existing work logs
   const logsByDate = useMemo(() => {
     const map: Record<string, { isLeave: boolean; entries: DayEntry[] }> = {};
     for (const wl of workLogs) {
@@ -388,7 +536,6 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
 
   function updateEntry(tempId: string, field: 'project_id' | 'hours', value: string) {
     setDateEntries(prev => prev.map(e => e.tempId === tempId ? { ...e, [field]: value } : e));
-    // Auto-fill project code when project is selected (handled by selecting project object)
   }
 
   function removeEntry(tempId: string) {
@@ -398,9 +545,7 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
   async function handleMarkLeave() {
     if (!selectedDate) return;
     setSaving(true);
-    // Remove any existing non-leave logs for that date
     await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', selectedDate);
-    // Insert leave
     const { error } = await supabase.from('work_logs').insert({ user_id: profile.id, log_date: selectedDate, is_leave: true });
     setSaving(false);
     if (error) alert(error.message);
@@ -410,7 +555,6 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
   async function handleSubmit() {
     if (!selectedDate) return;
     if (isLeaveMode) return handleMarkLeave();
-    // Validate
     for (const e of dateEntries) {
       if (!e.project_id) { alert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
       if (!e.hours || isNaN(Number(e.hours)) || Number(e.hours) <= 0) {
@@ -418,7 +562,6 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
       }
     }
     setSaving(true);
-    // Delete existing logs for date, re-insert
     await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', selectedDate);
     const inserts = dateEntries.map(e => ({
       user_id: profile.id, log_date: selectedDate,
@@ -459,11 +602,7 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
                       <span className="date-label">{formatDateDisplay(date, lang).replace('\n', ' ')}</span>
                     </td>
                     <td colSpan={3}><span className="badge-leave">{t.leaveDay}</span></td>
-                    <td>
-                      <button className="btn-action" onClick={() => openDate(date)}>
-                        <Pencil size={14} />
-                      </button>
-                    </td>
+                    <td><button className="btn-action" onClick={() => openDate(date)}><Pencil size={14} /></button></td>
                   </tr>
                 );
               }
@@ -481,15 +620,12 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
                     <td><span className="hours-badge">{entry.hours} jam</span></td>
                     {idx === 0 && (
                       <td rowSpan={dayData.entries.length}>
-                        <button className="btn-action" onClick={() => openDate(date)}>
-                          <Pencil size={14} />
-                        </button>
+                        <button className="btn-action" onClick={() => openDate(date)}><Pencil size={14} /></button>
                       </td>
                     )}
                   </tr>
                 ));
               }
-              // Empty row
               return (
                 <tr key={date} className={isToday ? 'row-today' : ''}>
                   <td className="date-cell">
@@ -498,9 +634,7 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
                   </td>
                   <td colSpan={3} className="empty-row-hint">—</td>
                   <td>
-                    <button className="btn-add-circle" onClick={() => openDate(date)}>
-                      <Plus size={16} />
-                    </button>
+                    <button className="btn-add-circle" onClick={() => openDate(date)}><Plus size={16} /></button>
                   </td>
                 </tr>
               );
@@ -509,7 +643,6 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
         </table>
       </div>
 
-      {/* Entry Modal */}
       {selectedDate && (
         <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setSelectedDate(null)}>
           <div className="modal entry-modal">
@@ -530,11 +663,7 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
               <div className="entry-list">
                 {dateEntries.map((entry, idx) => (
                   <ProjectEntryRow
-                    key={entry.tempId}
-                    entry={entry}
-                    projects={projects}
-                    lang={lang}
-                    t={t}
+                    key={entry.tempId} entry={entry} projects={projects} lang={lang} t={t}
                     onChange={(field, val) => updateEntry(entry.tempId, field, val)}
                     onRemove={dateEntries.length > 1 ? () => removeEntry(entry.tempId) : undefined}
                     index={idx}
@@ -611,9 +740,7 @@ function ProjectEntryRow({ entry, projects, lang, t, onChange, onRemove, index }
         </div>
       </div>
       {onRemove && (
-        <button className="btn-remove-entry" onClick={onRemove} title="Hapus">
-          <X size={14} />
-        </button>
+        <button className="btn-remove-entry" onClick={onRemove} title="Hapus"><X size={14} /></button>
       )}
     </div>
   );
@@ -623,12 +750,13 @@ function ProjectEntryRow({ entry, projects, lang, t, onChange, onRemove, index }
 function AdminView({
   t, lang, projects, users, workLogs, query, setQuery, sortBy, setSortBy,
   onExport, onCreate, onEdit, onDelete, onToggleActive,
-  onAddUser, onEditUser, onDeleteUser,
-  showCheckHours, setShowCheckHours, checkHoursDetail, setCheckHoursDetail
+  onAddUser, onEditUser, onDeleteUser, onUpdateRole,
+  showCheckHours, setShowCheckHours, checkHoursDetail, setCheckHoursDetail,
+  showAdminLogs, setShowAdminLogs, showAdminSettings, setShowAdminSettings,
+  adminSettings, onSaveSettings, currentProfile,
 }: any) {
   const totalHours = workLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
 
-  // Records for table (flat, with search/sort)
   const records = useMemo(() => {
     return workLogs
       .filter((w: WorkLog) => !w.is_leave)
@@ -642,7 +770,6 @@ function AdminView({
       });
   }, [workLogs, query, sortBy]);
 
-  // Check hours: last 5 days, users < 20 hours
   const last5Days = useMemo(() => {
     const arr: string[] = [];
     for (let i = 0; i < 5; i++) {
@@ -680,6 +807,28 @@ function AdminView({
         </div>
       </div>
 
+      {/* Admin tools row */}
+      <div className="admin-section" style={{ paddingBottom: 0 }}>
+        <div className="section-header" style={{ marginBottom: 0 }}>
+          <h2 style={{ fontSize: 14, color: 'var(--muted)' }}>{t.adminSettings}</h2>
+          <div className="section-actions">
+            <button className="btn-secondary" onClick={() => setShowAdminSettings(!showAdminSettings)}>
+              <Settings size={14} /> {t.adminSettings}
+            </button>
+            <button className="btn-secondary" onClick={() => setShowAdminLogs(!showAdminLogs)}>
+              <ScrollText size={14} /> {t.adminLogs}
+            </button>
+          </div>
+        </div>
+
+        {showAdminSettings && (
+          <AdminSettingsPanel t={t} lang={lang} adminSettings={adminSettings} onSave={onSaveSettings} />
+        )}
+        {showAdminLogs && (
+          <AdminLogsPanel t={t} lang={lang} />
+        )}
+      </div>
+
       {/* Records */}
       <div className="admin-section">
         <div className="section-header">
@@ -708,9 +857,7 @@ function AdminView({
                   {lowHoursUsers.map(({ user, hours, hasCuti }: any) => (
                     <tr key={user.id}>
                       <td>{user.full_name}</td>
-                      <td>
-                        <span className="hours-badge warn">{hours} jam{hasCuti ? ' + cuti' : ''}</span>
-                      </td>
+                      <td><span className="hours-badge warn">{hours} jam{hasCuti ? ' + cuti' : ''}</span></td>
                       <td>
                         <button className="btn-action" onClick={() => setCheckHoursDetail(user)}>
                           <Info size={14} /> {t.moreDetail}
@@ -810,7 +957,7 @@ function AdminView({
         </div>
       </div>
 
-      {/* User List */}
+      {/* User List — all users with role editing */}
       <div className="admin-section">
         <div className="section-header">
           <h2>{t.userList}</h2>
@@ -818,23 +965,190 @@ function AdminView({
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>{t.name}</th><th>{t.actions}</th></tr></thead>
+            <thead>
+              <tr>
+                <th>{t.name}</th>
+                <th>Email</th>
+                <th>{t.role}</th>
+                <th>{t.actions}</th>
+              </tr>
+            </thead>
             <tbody>
-              {users.filter((u: Profile) => u.role === 'user').map((u: Profile) => (
-                <tr key={u.id}>
-                  <td>{u.full_name}</td>
-                  <td>
-                    <div className="action-btns">
-                      <button className="btn-action" onClick={() => onEditUser(u)}><Pencil size={13} /> {t.edit}</button>
-                      <button className="btn-action danger" onClick={() => onDeleteUser(u)}><Trash2 size={13} /> {t.delete}</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {users.map((u: Profile) => {
+                const protected_ = u.email ? isProtectedDomain(u.email) : false;
+                const isSelf = u.id === currentProfile?.id;
+                return (
+                  <tr key={u.id}>
+                    <td>{u.full_name}</td>
+                    <td style={{ color: 'var(--muted)', fontSize: 12 }}>
+                      {u.email || '—'}
+                      {protected_ && (
+                        <span title={t.protectedDomain} style={{ marginLeft: 6, color: '#f59e0b' }}>
+                          <Shield size={11} style={{ display: 'inline' }} />
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {protected_ || isSelf ? (
+                        <span className={`role-badge ${u.role}`}>{u.role}</span>
+                      ) : (
+                        <select
+                          className="role-select"
+                          value={u.role}
+                          onChange={e => onUpdateRole(u, e.target.value)}
+                        >
+                          <option value="user">user</option>
+                          <option value="admin">admin</option>
+                        </select>
+                      )}
+                    </td>
+                    <td>
+                      <div className="action-btns">
+                        <button className="btn-action" onClick={() => onEditUser(u)}><Pencil size={13} /> {t.edit}</button>
+                        {!isSelf && (
+                          <button className="btn-action danger" onClick={() => onDeleteUser(u)}><Trash2 size={13} /> {t.delete}</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Admin Settings Panel ─────────────────────────────────────────────────────
+function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
+  const [domain, setDomain] = useState(adminSettings.login_domain);
+  const [allowSignup, setAllowSignup] = useState(adminSettings.allow_signup);
+
+  return (
+    <div className="check-hours-panel" style={{ marginTop: 16, marginBottom: 8 }}>
+      <div className="check-hours-header">
+        <span><Settings size={14} /> {t.adminSettings}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '12px 0' }}>
+        {/* Toggle signup */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.allowSignup}</div>
+            <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+              {lang === 'id'
+                ? 'Jika dimatikan, tombol "Buat akun" tidak muncul di halaman login.'
+                : 'When off, the "Create account" button is hidden on the login page.'}
+            </div>
+          </div>
+          <button
+            className={`btn-action ${allowSignup ? 'activate' : 'deactivate'}`}
+            onClick={() => {
+              const next = !allowSignup;
+              setAllowSignup(next);
+              onSave({ allow_signup: next });
+            }}
+            style={{ minWidth: 80, fontWeight: 600 }}
+          >
+            {allowSignup ? <><ToggleRight size={16} /> ON</> : <><ToggleLeft size={16} /> OFF</>}
+          </button>
+        </div>
+
+        {/* Domain login */}
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{t.loginDomain}</div>
+          <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>
+            {lang === 'id'
+              ? 'Domain yang digunakan saat login. User hanya ketik username, @domain otomatis ditambahkan.'
+              : 'Domain used during login. Users only type their username; @domain is appended automatically.'}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <span style={{ color: 'var(--muted)', alignSelf: 'center', fontSize: 14 }}>@</span>
+            <input
+              value={domain}
+              onChange={e => setDomain(e.target.value)}
+              placeholder="company.com"
+              style={{ flex: 1, maxWidth: 240 }}
+            />
+            <button className="btn-primary" onClick={() => onSave({ login_domain: domain })}>
+              <Check size={14} /> {t.save}
+            </button>
+          </div>
+          <div style={{ marginTop: 6, color: 'var(--muted)', fontSize: 12 }}>
+            {lang === 'id' ? 'Contoh login' : 'Example login'}: <code>john</code> → <code>john@{domain || 'company.com'}</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Admin Logs Panel ─────────────────────────────────────────────────────────
+function AdminLogsPanel({ t, lang }: any) {
+  const [logs, setLogs] = useState<AdminLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/admin/logs?page=${page}`, {
+        headers: { Authorization: `Bearer ${session?.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data.logs || []);
+        setTotal(data.total || 0);
+      }
+      setLoading(false);
+    })();
+  }, [page]);
+
+  return (
+    <div className="check-hours-panel" style={{ marginTop: 16, marginBottom: 8 }}>
+      <div className="check-hours-header">
+        <span><ScrollText size={14} /> {t.adminLogs} ({total})</span>
+      </div>
+      {loading ? (
+        <p style={{ padding: '12px 0', color: 'var(--muted)', fontSize: 13 }}>{t.loading}</p>
+      ) : logs.length === 0 ? (
+        <p style={{ padding: '12px 0', color: 'var(--muted)', fontSize: 13 }}>{t.noData}</p>
+      ) : (
+        <table className="check-table" style={{ marginTop: 8 }}>
+          <thead>
+            <tr>
+              <th>{lang === 'id' ? 'Waktu' : 'Time'}</th>
+              <th>Admin</th>
+              <th>{lang === 'id' ? 'Aksi' : 'Action'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.map(log => (
+              <tr key={log.id}>
+                <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: 'var(--muted)' }}>
+                  {new Date(log.created_at).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                </td>
+                <td style={{ fontSize: 13 }}>
+                  {(log.admin as any)?.full_name || '—'}
+                </td>
+                <td style={{ fontSize: 13 }}>
+                  {formatLogAction(log.action, log.details, lang)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {total > 50 && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+          <button className="btn-secondary" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>←</button>
+          <span style={{ alignSelf: 'center', fontSize: 13 }}>Page {page}</span>
+          <button className="btn-secondary" onClick={() => setPage(p => p + 1)} disabled={page * 50 >= total}>→</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -906,7 +1220,27 @@ function ProjectModal({ t, users, project, onClose, onSubmit }: any) {
   );
 }
 
-function UserModal({ t, user, onClose, onSubmit }: any) {
+function UserModal({ t, lang, user, onClose, onSubmit, loginDomain }: any) {
+  const protected_ = user?.email ? isProtectedDomain(user.email) : false;
+  const [username, setUsername] = useState('');
+  const [fullEmail, setFullEmail] = useState('');
+  // fullEmail overrides username@domain if set
+  const finalEmail = fullEmail.trim() ? fullEmail.trim() : (username.trim() ? `${username.trim()}@${loginDomain}` : '');
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    // inject final email
+    const syntheticData = new FormData();
+    syntheticData.append('full_name', String(f.get('full_name') || ''));
+    if (!user) syntheticData.append('email', finalEmail);
+    syntheticData.append('password', String(f.get('password') || ''));
+    // Build a synthetic event with our form data
+    const fakeEvent = { preventDefault: () => {}, currentTarget: { elements: {}, ...Object.fromEntries(syntheticData) } };
+    // Pass directly to parent onSubmit by calling with form data override
+    onSubmit(e, finalEmail);
+  }
+
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
@@ -916,11 +1250,56 @@ function UserModal({ t, user, onClose, onSubmit }: any) {
         </div>
         <form onSubmit={onSubmit}>
           <div className="field"><label>{t.name}</label><input name="full_name" required defaultValue={user?.full_name} /></div>
-          {!user && <div className="field"><label>{t.email}</label><input name="email" type="email" required /></div>}
+          {!user && (
+            <div className="field">
+              <label>Email</label>
+              {/* Username + domain shortcut */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <input
+                  placeholder={lang === 'id' ? 'nama.pengguna' : 'username'}
+                  style={{ flex: 1 }}
+                  value={username}
+                  onChange={e => { setUsername(e.target.value); setFullEmail(''); }}
+                  disabled={!!fullEmail}
+                />
+                <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>@{loginDomain}</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>
+                {lang === 'id' ? '— atau email lengkap —' : '— or full email —'}
+              </div>
+              <input
+                name="email"
+                type="email"
+                placeholder={`user@other-domain.com`}
+                value={fullEmail}
+                onChange={e => { setFullEmail(e.target.value); setUsername(''); }}
+                // Make required only if username not set
+                required={!username.trim()}
+              />
+              {finalEmail && (
+                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--brand)' }}>
+                  ✓ {finalEmail}
+                </div>
+              )}
+              {/* Hidden fallback: if fullEmail is empty but username is set, we need to inject via name="email" */}
+              {username.trim() && !fullEmail && (
+                <input type="hidden" name="email" value={`${username.trim()}@${loginDomain}`} />
+              )}
+            </div>
+          )}
           <div className="field">
-            <label>{t.password}{user ? ` (${t.cancel === 'Cancel' ? 'optional' : 'opsional'})` : ''}</label>
+            <label>{t.password}{user ? ` (${lang === 'en' ? 'optional' : 'opsional'})` : ''}</label>
             <input name="password" type="password" minLength={6} required={!user} />
           </div>
+          {protected_ && (
+            <div style={{
+              background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#f59e0b',
+              display: 'flex', alignItems: 'center', gap: 6
+            }}>
+              <Shield size={13} /> {t.protectedDomain} — role tidak dapat diubah
+            </div>
+          )}
           <div className="modal-footer">
             <div />
             <div className="modal-footer-right">
