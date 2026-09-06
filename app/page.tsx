@@ -267,7 +267,7 @@ export default function Home() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">
-            <Image src="/logo/weaver.svg" alt="Weaver" width={28} height={28} style={{ objectFit: 'contain' }} />
+            <Image src="/logo/weaver.svg" alt="Weaver" width={56} height={56} style={{ objectFit: 'contain' }} />
           </span>
           {t.app}
         </div>
@@ -309,7 +309,7 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit }: any) {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">
-            <Image src="/logo/weaver.svg" alt="Weaver" width={28} height={28} style={{ objectFit: 'contain' }} />
+            <Image src="/logo/weaver.svg" alt="Weaver" width={56} height={56} style={{ objectFit: 'contain' }} />
           </span>
           {t.app}
         </div>
