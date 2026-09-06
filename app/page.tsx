@@ -27,7 +27,7 @@ type AdminLog = {
   admin?: { full_name: string } | null;
   target?: { full_name: string } | null;
 };
-type AdminSettings = { allow_signup: boolean; login_domain: string };
+type AdminSettings = { allow_signup: boolean; login_domain: string; use_domain_login: boolean };
 
 const PROTECTED_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 
@@ -72,6 +72,9 @@ const text = {
     allowSignup: 'Izinkan buat akun', loginDomain: 'Domain login default',
     adminSettings: 'Pengaturan Admin', changeRole: 'Ubah Role',
     protectedDomain: 'Domain ini terlindungi', settingsSaved: 'Pengaturan disimpan.',
+    useDomainLogin: 'Gunakan domain login default',
+    useDomainLoginDesc: 'Jika aktif, user cukup ketik username dan @domain otomatis ditambahkan. Jika nonaktif, user harus ketik email lengkap.',
+    tos: 'Syarat & Ketentuan', privacy: 'Kebijakan Privasi',
   },
   en: {
     app: 'Weaver', login: 'Sign in', email: 'Email', password: 'Password',
@@ -103,6 +106,9 @@ const text = {
     allowSignup: 'Allow account creation', loginDomain: 'Default login domain',
     adminSettings: 'Admin Settings', changeRole: 'Change Role',
     protectedDomain: 'Domain is protected', settingsSaved: 'Settings saved.',
+    useDomainLogin: 'Use default login domain',
+    useDomainLoginDesc: 'When on, users only type their username and @domain is appended. When off, users must enter their full email.',
+    tos: 'Terms of Service', privacy: 'Privacy Policy',
   }
 } as const;
 
@@ -162,7 +168,7 @@ export default function Home() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [authMode, setAuthMode] = useState<'in' | 'up'>('in');
-  const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com' });
+  const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com', use_domain_login: true });
 
   // Admin modals
   const [createOpen, setCreateOpen] = useState(false);
@@ -192,6 +198,7 @@ export default function Home() {
         setAdminSettings({
           allow_signup: data.allow_signup === 'true',
           login_domain: data.login_domain || 'company.com',
+          use_domain_login: data.use_domain_login !== 'false', // default true
         });
       }
     } catch {}
@@ -252,9 +259,12 @@ export default function Home() {
     const username = String(f.get('username') || '').trim();
     const password = String(f.get('password'));
     const full_name = String(f.get('full_name') || '');
+    const emailRaw = String(f.get('email') || '');
     const email = authMode === 'in'
-      ? `${username}@${adminSettings.login_domain}`
-      : String(f.get('email') || '');
+      ? (adminSettings.use_domain_login
+          ? `${username}@${adminSettings.login_domain}`
+          : emailRaw)
+      : emailRaw;
 
     const result = authMode === 'in'
       ? await supabase.auth.signInWithPassword({ email, password })
@@ -349,6 +359,7 @@ export default function Home() {
     const body: any = {};
     if (settings.allow_signup !== undefined) body.allow_signup = settings.allow_signup;
     if (settings.login_domain !== undefined) body.login_domain = settings.login_domain;
+    if (settings.use_domain_login !== undefined) body.use_domain_login = settings.use_domain_login;
     const res = await fetch('/api/admin/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
@@ -473,22 +484,31 @@ export default function Home() {
         />
       )}
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
-      <SiteFooter />
+      <SiteFooter t={t} />
     </main>
   );
 }
 
 // ─── Footer ─────────────────────────────────────────────────────────────────
-function SiteFooter() {
+function SiteFooter({ t }: { t?: any }) {
   return (
     <footer className="site-footer">
-      <div className="footer-copyright">© 2026 Weaver</div>
+      <div className="footer-copyright">© 2026 Weaver — Leonx Lab</div>
       <div className="footer-support">
         <span className="footer-support-icon"><Mail size={13} /></span>
-        <span className="footer-support-label">Weaver Support</span>
+        <span className="footer-support-label">Support</span>
         <a href="mailto:support@leonxlab.digital">support@leonxlab.digital</a>
         <span className="footer-dot" aria-hidden="true">•</span>
         <a href="mailto:mailto@leonxlab.app">mailto@leonxlab.app</a>
+      </div>
+      <div className="footer-legal">
+        <a href="/tos" target="_blank" rel="noopener noreferrer">
+          <ScrollText size={11} /> {t?.tos || 'Syarat & Ketentuan'}
+        </a>
+        <span className="footer-dot" aria-hidden="true">•</span>
+        <a href="/privacy" target="_blank" rel="noopener noreferrer">
+          <Shield size={11} /> {t?.privacy || 'Kebijakan Privasi'}
+        </a>
       </div>
     </footer>
   );
@@ -516,7 +536,8 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any)
           {mode === 'up' && <div className="field"><label>{t.name}</label><input required name="full_name" /></div>}
           {mode === 'up' ? (
             <div className="field"><label>{t.email}</label><input required name="email" type="email" /></div>
-          ) : (
+          ) : adminSettings.use_domain_login ? (
+            /* Username-only mode: @domain appended automatically */
             <div className="field">
               <label>{t.username || 'Username'}</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -528,6 +549,12 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any)
                   @{adminSettings.login_domain}
                 </span>
               </div>
+            </div>
+          ) : (
+            /* Open mode: full email required */
+            <div className="field">
+              <label>{t.email}</label>
+              <input required name="email" type="email" placeholder="user@company.com" />
             </div>
           )}
           <div className="field"><label>{t.password}</label><input required name="password" type="password" minLength={6} /></div>
@@ -542,7 +569,7 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any)
           </p>
         )}
       </section>
-      <SiteFooter />
+      <SiteFooter t={t} />
     </main>
   );
 }
@@ -1090,59 +1117,89 @@ function AdminView({
 function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
   const [domain, setDomain] = useState(adminSettings.login_domain);
   const [allowSignup, setAllowSignup] = useState(adminSettings.allow_signup);
+  const [useDomainLogin, setUseDomainLogin] = useState(adminSettings.use_domain_login);
+
+  const divider = <div style={{ borderTop: '1px solid var(--line)', margin: '4px 0' }} />;
+
+  function ToggleRow({ label, desc, value, onChange }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void }) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>{label}</div>
+          <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 2 }}>{desc}</div>
+        </div>
+        <button
+          className={`btn-action ${value ? 'activate' : 'deactivate'}`}
+          onClick={() => onChange(!value)}
+          style={{ minWidth: 80, fontWeight: 600, flexShrink: 0 }}
+        >
+          {value ? <><ToggleRight size={16} /> ON</> : <><ToggleLeft size={16} /> OFF</>}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="check-hours-panel" style={{ marginTop: 16, marginBottom: 8 }}>
       <div className="check-hours-header">
         <span><Settings size={14} /> {t.adminSettings}</span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '12px 0' }}>
-        {/* Toggle signup */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.allowSignup}</div>
-            <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-              {lang === 'id'
-                ? 'Jika dimatikan, tombol "Buat akun" tidak muncul di halaman login.'
-                : 'When off, the "Create account" button is hidden on the login page.'}
-            </div>
-          </div>
-          <button
-            className={`btn-action ${allowSignup ? 'activate' : 'deactivate'}`}
-            onClick={() => {
-              const next = !allowSignup;
-              setAllowSignup(next);
-              onSave({ allow_signup: next });
-            }}
-            style={{ minWidth: 80, fontWeight: 600 }}
-          >
-            {allowSignup ? <><ToggleRight size={16} /> ON</> : <><ToggleLeft size={16} /> OFF</>}
-          </button>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '12px 0' }}>
 
-        {/* Domain login */}
-        <div>
+        {/* Toggle signup */}
+        <ToggleRow
+          label={t.allowSignup}
+          desc={lang === 'id'
+            ? 'Jika dimatikan, tombol "Buat akun" tidak muncul di halaman login.'
+            : 'When off, the "Create account" button is hidden on the login page.'}
+          value={allowSignup}
+          onChange={next => { setAllowSignup(next); onSave({ allow_signup: next }); }}
+        />
+
+        {divider}
+
+        {/* Toggle domain login */}
+        <ToggleRow
+          label={t.useDomainLogin}
+          desc={t.useDomainLoginDesc}
+          value={useDomainLogin}
+          onChange={next => { setUseDomainLogin(next); onSave({ use_domain_login: next }); }}
+        />
+
+        {divider}
+
+        {/* Domain value (only relevant when domain login is on) */}
+        <div style={{ opacity: useDomainLogin ? 1 : 0.45, pointerEvents: useDomainLogin ? 'auto' : 'none' }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{t.loginDomain}</div>
           <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>
             {lang === 'id'
-              ? 'Domain yang digunakan saat login. User hanya ketik username, @domain otomatis ditambahkan.'
-              : 'Domain used during login. Users only type their username; @domain is appended automatically.'}
+              ? 'Domain yang digunakan saat login dengan username. Hanya berlaku jika "Gunakan domain login default" aktif.'
+              : 'Domain appended to username on login. Only applies when "Use default login domain" is on.'}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ color: 'var(--muted)', alignSelf: 'center', fontSize: 14 }}>@</span>
             <input
               value={domain}
               onChange={e => setDomain(e.target.value)}
               placeholder="company.com"
-              style={{ flex: 1, maxWidth: 240 }}
+              style={{ flex: 1, minWidth: 160, maxWidth: 240 }}
             />
             <button className="btn-primary" onClick={() => onSave({ login_domain: domain })}>
               <Check size={14} /> {t.save}
             </button>
           </div>
-          <div style={{ marginTop: 6, color: 'var(--muted)', fontSize: 12 }}>
-            {lang === 'id' ? 'Contoh login' : 'Example login'}: <code>john</code> → <code>john@{domain || 'company.com'}</code>
-          </div>
+          {useDomainLogin && (
+            <div style={{ marginTop: 6, color: 'var(--muted)', fontSize: 12 }}>
+              {lang === 'id' ? 'Contoh login' : 'Login example'}: <code>john</code> → <code>john@{domain || 'company.com'}</code>
+            </div>
+          )}
+          {!useDomainLogin && (
+            <div style={{ marginTop: 6, color: 'var(--warn)', fontSize: 12 }}>
+              {lang === 'id'
+                ? '⚠ Domain tidak digunakan — user harus ketik email lengkap saat login.'
+                : '⚠ Domain not used — users must type their full email to log in.'}
+            </div>
+          )}
         </div>
       </div>
     </div>

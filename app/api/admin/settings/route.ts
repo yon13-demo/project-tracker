@@ -41,6 +41,9 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.login_domain === 'string' && body.login_domain.trim()) {
     updates.push({ key: 'login_domain', value: body.login_domain.trim() });
   }
+  if (typeof body.use_domain_login === 'boolean') {
+    updates.push({ key: 'use_domain_login', value: String(body.use_domain_login) });
+  }
 
   for (const { key, value } of updates) {
     const { error } = await db.from('admin_settings').upsert(
@@ -51,7 +54,11 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Log action
-  const action = body.allow_signup !== undefined ? 'TOGGLE_SIGNUP' : 'SET_DOMAIN';
+  const action = body.allow_signup !== undefined
+    ? 'TOGGLE_SIGNUP'
+    : body.use_domain_login !== undefined
+      ? 'TOGGLE_DOMAIN_LOGIN'
+      : 'SET_DOMAIN';
   await db.from('admin_logs').insert({
     admin_id: auth.profile.id,
     action,

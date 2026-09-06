@@ -435,6 +435,15 @@ tbody tr:hover { background: #fafbff; }
 .footer-support a { color: var(--brand); text-decoration: none; }
 .footer-support a:hover { color: var(--brand-dark); text-decoration: underline; }
 .footer-dot { color: var(--line); }
+.footer-legal {
+  display: flex; align-items: center; flex-wrap: wrap; justify-content: center;
+  gap: 6px; font-size: 12px; margin-top: 2px;
+}
+.footer-legal a {
+  display: inline-flex; align-items: center; gap: 3px;
+  color: var(--muted); text-decoration: none;
+}
+.footer-legal a:hover { color: var(--brand); }
 
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
@@ -521,6 +530,42 @@ tbody tr:hover { background: #fafbff; }
   .days-table th { padding: 6px 8px; }
   .days-table td { padding: 8px 8px; }
 }
+
+/* ─── Legal pages (TOS / Privacy) ───────────────────────────────────────── */
+.legal-page { padding-bottom: 40px; }
+.legal-hero {
+  text-align: center;
+  padding: 32px 0 28px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 32px;
+}
+.legal-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px; border-radius: 16px;
+  background: var(--brand-soft); color: var(--brand);
+  margin-bottom: 14px;
+}
+.legal-icon-green { background: var(--success-soft); color: var(--success); }
+.legal-hero h1 { font-size: 26px; letter-spacing: -.6px; margin-bottom: 6px; }
+.legal-meta { font-size: 12px; color: var(--muted); }
+.legal-body { font-size: 14px; line-height: 1.75; color: var(--ink2); }
+.legal-body > p { margin-bottom: 20px; }
+.legal-section { margin-bottom: 28px; }
+.legal-section h2 {
+  font-size: 15px; font-weight: 700; letter-spacing: -.3px;
+  color: var(--ink); margin-bottom: 10px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--line2);
+}
+.legal-section p { margin-bottom: 10px; color: var(--ink2); }
+.legal-section ul { padding-left: 20px; margin: 8px 0 10px; }
+.legal-section ul li { margin-bottom: 6px; }
+.legal-contact {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-top: 8px; font-size: 14px;
+}
+.legal-contact a { color: var(--brand); text-decoration: none; }
+.legal-contact a:hover { text-decoration: underline; }
+.legal-contact-sep { color: var(--line); }
 
 /* ─── Role badges & selects ─────────────────────────────────────────────── */
 .role-badge {
