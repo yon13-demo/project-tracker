@@ -192,19 +192,21 @@ p { margin: 0; color: var(--muted); }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
-.days-table { width: 100%; border-collapse: collapse; }
+.days-table { width: 100%; border-collapse: collapse; font-size: 15px; }
 .days-table th {
-  padding: 11px 14px;
+  padding: 12px 16px;
   background: var(--line2);
   text-align: left;
-  font-size: 11px; font-weight: 700;
+  font-size: 12px; font-weight: 700;
   color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
   border-bottom: 1px solid var(--line);
 }
 .days-table td {
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
@@ -213,14 +215,20 @@ p { margin: 0; color: var(--muted); }
 .row-today { background: #fefce8 !important; }
 .row-today:hover { background: #fef9c3 !important; }
 
-.date-cell { white-space: nowrap; min-width: 90px; }
-.date-label { font-size: 13px; font-weight: 500; color: var(--ink2); }
+.date-cell { white-space: nowrap; min-width: 100px; }
+.date-label { font-size: 15px; font-weight: 500; color: var(--ink2); }
 .today-dot {
   display: inline-block; width: 6px; height: 6px;
   background: var(--brand); border-radius: 50%;
   margin-right: 6px; vertical-align: middle;
 }
 .empty-row-hint { color: var(--line); font-size: 20px; }
+.days-table .hours-badge,
+.days-table .code-badge,
+.days-table .badge-leave {
+  font-size: 13px;
+  padding: 4px 11px;
+}
 
 /* ─── Badges ─────────────────────────────────────────────────────────────── */
 .code-badge {
@@ -440,7 +448,17 @@ tbody tr:hover { background: #fafbff; }
   .modal-footer { flex-wrap: wrap; }
   .entry-row { flex-direction: column; }
   table { min-width: 500px; }
-  .days-table th, .days-table td { padding: 10px 10px; }
+  .days-table { min-width: 460px; font-size: 13px; }
+  .days-table th { font-size: 10.5px; padding: 10px 12px; }
+  .days-table td { padding: 11px 12px; }
+  .date-label { font-size: 13px; }
+  .date-cell { min-width: 80px; }
+  .days-table .hours-badge,
+  .days-table .code-badge,
+  .days-table .badge-leave {
+    font-size: 11px;
+    padding: 3px 9px;
+  }
 }
 
 /* ─── Role badges & selects ─────────────────────────────────────────────── */
