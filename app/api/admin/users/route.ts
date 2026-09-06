@@ -28,10 +28,16 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   if (!await verifyAdmin(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id, full_name, password } = await request.json();
+  if (!id) return NextResponse.json({ error: 'User ID is required.' }, { status: 400 });
   const db = adminClient();
-  const { error: profileError } = await db.from('profiles').update({ full_name }).eq('id', id).eq('role', 'user');
+  // Update profile name
+  const { error: profileError } = await db.from('profiles').update({ full_name }).eq('id', id);
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 400 });
-  if (password) { const { error } = await db.auth.admin.updateUserById(id, { password }); if (error) return NextResponse.json({ error: error.message }, { status: 400 }); }
+  // Optionally update password
+  if (password && password.length >= 6) {
+    const { error: pwError } = await db.auth.admin.updateUserById(id, { password });
+    if (pwError) return NextResponse.json({ error: pwError.message }, { status: 400 });
+  }
   return NextResponse.json({ ok: true });
 }
 
