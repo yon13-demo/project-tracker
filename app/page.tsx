@@ -165,7 +165,7 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [authMode, setAuthMode] = useState<'in' | 'up'>('in');
   const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com', use_domain_login: true });
 

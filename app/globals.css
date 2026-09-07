@@ -44,10 +44,11 @@ p { margin: 0; color: var(--muted); }
 /* ─── Shell ─────────────────────────────────────────────────────────────── */
 .shell {
   max-width: 1100px;
+  min-height: 100vh;
   margin: 0 auto;
   padding: 0 20px 80px;
 }
-.auth-shell { max-width: 420px; }
+.auth-shell { max-width: 420px; display: flex; flex-direction: column; }
 
 /* ─── Topbar ─────────────────────────────────────────────────────────────── */
 .topbar {
@@ -414,7 +415,7 @@ tbody tr:hover { background: #fafbff; }
 
 /* Footer */
 .site-footer {
-  margin-top: 36px; padding: 22px 0 6px;
+  margin-top: auto; padding: 36px 0 6px;
   border-top: 1px solid var(--line);
   display: flex; flex-direction: column; align-items: center; gap: 8px;
   text-align: center;
