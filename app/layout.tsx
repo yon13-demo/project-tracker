@@ -6,7 +6,6 @@ export const metadata: Metadata = { title: 'Weaver', description: 'Project compl
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) { return <html lang="id"><body>{children}</body></html>; }

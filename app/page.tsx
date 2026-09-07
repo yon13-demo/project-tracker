@@ -8,7 +8,6 @@ import {
   ToggleLeft, ToggleRight, Clock, Info, X, Shield, ScrollText,
   Settings, UserCog, AtSign, Mail
 } from 'lucide-react';
-import ExcelJS from 'exceljs';
 import { supabase } from '@/lib/supabase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -375,6 +374,7 @@ export default function Home() {
   }
 
   async function exportExcel() {
+    const { default: ExcelJS } = await import('exceljs');
     const rows = workLogs.filter(wl => {
       const key = `${wl.profiles?.full_name} ${wl.projects?.name} ${wl.projects?.project_code}`.toLowerCase();
       return key.includes(query.toLowerCase());
@@ -533,16 +533,16 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any)
         <h1>{mode === 'in' ? t.login : t.createAccount}</h1>
         <p className="auth-hint">{t.authHint}</p>
         <form onSubmit={onSubmit}>
-          {mode === 'up' && <div className="field"><label>{t.name}</label><input required name="full_name" /></div>}
+          {mode === 'up' && <div className="field"><label htmlFor="auth-full-name">{t.name}</label><input id="auth-full-name" required name="full_name" /></div>}
           {mode === 'up' ? (
-            <div className="field"><label>{t.email}</label><input required name="email" type="email" /></div>
+            <div className="field"><label htmlFor="auth-email">{t.email}</label><input id="auth-email" required name="email" type="email" /></div>
           ) : adminSettings.use_domain_login ? (
             /* Username-only mode: @domain appended automatically */
             <div className="field">
-              <label>{t.username || 'Username'}</label>
+              <label htmlFor="auth-username">{t.username || 'Username'}</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input
-                  required name="username" placeholder={lang === 'id' ? 'nama.anda' : 'your.name'}
+                  id="auth-username" required name="username" placeholder={lang === 'id' ? 'nama.anda' : 'your.name'}
                   style={{ flex: 1 }}
                 />
                 <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
@@ -553,11 +553,11 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any)
           ) : (
             /* Open mode: full email required */
             <div className="field">
-              <label>{t.email}</label>
-              <input required name="email" type="email" placeholder="user@company.com" />
+              <label htmlFor="auth-email">{t.email}</label>
+              <input id="auth-email" required name="email" type="email" placeholder="user@company.com" />
             </div>
           )}
-          <div className="field"><label>{t.password}</label><input required name="password" type="password" minLength={6} /></div>
+          <div className="field"><label htmlFor="auth-password">{t.password}</label><input id="auth-password" required name="password" type="password" minLength={6} /></div>
           <button className="btn-primary full-width" type="submit">{mode === 'in' ? t.signIn : t.signUp}</button>
         </form>
         {/* Toggle signup hanya muncul kalau allow_signup aktif */}
