@@ -66,7 +66,7 @@ const text = {
     active: 'Aktif', inactive: 'Nonaktif', activate: 'Aktifkan', deactivate: 'Nonaktifkan',
     leave: 'Cuti', addProject: 'Tambah Proyek', inputHours: 'Jam kerja',
     submit: 'Submit', checkHours: 'Periksa Jam Kerja',
-    lowHours: 'Karyawan jam kerja < 20 jam (5 hari terakhir)',
+    lowHours: 'Karyawan jam kerja < 25 jam (7 hari terakhir)',
     moreDetail: 'Detail', closeDetail: 'Tutup',
     noData: 'Tidak ada data', leaveDay: 'Cuti',
     pilihProyek: 'Pilih proyek…', namaPrjPlaceholder: 'Nama proyek',
@@ -105,7 +105,7 @@ const text = {
     active: 'Active', inactive: 'Inactive', activate: 'Activate', deactivate: 'Deactivate',
     leave: 'Leave', addProject: 'Add Project', inputHours: 'Work hours',
     submit: 'Submit', checkHours: 'Check Work Hours',
-    lowHours: 'Employees with < 20 hours (last 5 days)',
+    lowHours: 'Employees with < 25 hours (last 7 days)',
     moreDetail: 'Detail', closeDetail: 'Close',
     noData: 'No data', leaveDay: 'Leave',
     pilihProyek: 'Select project…', namaPrjPlaceholder: 'Project name',
@@ -1075,13 +1075,13 @@ function AdminView({
   }, []);
 
   const lowHoursUsers = useMemo(() => {
-    const normalUsers = users.filter((u: Profile) => u.role === 'user');
+    const normalUsers = users.filter((u: Profile) => !isDeveloperEmail(u.email));
     return normalUsers.map((u: Profile) => {
       const userLogs = workLogs.filter((w: WorkLog) => w.user_id === u.id && last7Days.includes(w.log_date));
       const workHours = userLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
       const hasCuti = userLogs.some((w: WorkLog) => w.is_leave);
       return { user: u, hours: workHours, hasCuti };
-    }).filter((x: any) => x.hours < 20);
+    }).filter((x: any) => x.hours < 25);
   }, [users, workLogs, last7Days]);
 
   return (
