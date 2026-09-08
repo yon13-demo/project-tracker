@@ -209,6 +209,7 @@ export default function Home() {
   const [showAdminSettings, setShowAdminSettings] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [domainNotice, setDomainNotice] = useState<'upcoming' | 'migration' | null>(null);
 
   useEffect(() => {
     alertSetter = setAlertMessage;
@@ -225,6 +226,17 @@ export default function Home() {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem('weaver-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    const hostname = window.location.hostname;
+    const isAlternateDomain = hostname === 'weaver.leonxlab.app' || hostname === 'weaver-demo.leonxlab.app';
+    if (!isAlternateDomain) return;
+    const today = new Date();
+    const launchDate = new Date('2026-09-10T00:00:00');
+    const shutdownDate = new Date('2026-10-01T00:00:00');
+    if (today < launchDate) setDomainNotice('upcoming');
+    else if (today < shutdownDate) setDomainNotice('migration');
+  }, []);
 
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
@@ -521,6 +533,7 @@ export default function Home() {
       />
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
       <StatusToast message={statusMessage} />
+      <DomainNotice notice={domainNotice} onClose={() => setDomainNotice(null)} />
     </>
   );
   const isAdmin = profile.role === 'admin';
@@ -586,6 +599,7 @@ export default function Home() {
       )}
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
       <StatusToast message={statusMessage} />
+      <DomainNotice notice={domainNotice} onClose={() => setDomainNotice(null)} />
       <SiteFooter t={t} />
     </main>
   );
@@ -628,6 +642,38 @@ function MaintenanceView({ t, onLogout }: { t: any; onLogout: () => void }) {
         </button>
       </section>
     </main>
+  );
+}
+
+function DomainNotice({ notice, onClose }: { notice: 'upcoming' | 'migration' | null; onClose: () => void }) {
+  if (!notice) return null;
+  const upcoming = notice === 'upcoming';
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal domain-notice-modal">
+        <div className="domain-notice-body">
+          <div className="domain-notice-kicker">WEAVER</div>
+          <h2>{upcoming ? 'Weaver.app segera hadir' : 'Pindah ke Weaver.app'}</h2>
+          <p>
+            {upcoming
+              ? 'Anda sedang menggunakan domain alternatif. Domain utama kami akan resmi tersedia pada 10 September 2026.'
+              : 'Domain utama Weaver.app sudah aktif. Domain ini akan dinonaktifkan mulai 1 Oktober 2026.'}
+          </p>
+          <a className="domain-url" href="https://weaver.app/" target="_blank" rel="noopener noreferrer">
+            <span className="domain-url-prefix">https://</span>weaver.app/
+          </a>
+          <p className="domain-bookmark-hint">
+            Simpan alamat di atas sebagai bookmark agar mudah diakses kembali.
+          </p>
+        </div>
+        <div className="modal-footer domain-notice-footer">
+          <button className="btn-secondary" onClick={onClose}>Nanti saja</button>
+          <a className="btn-primary" href="https://weaver.app/" target="_blank" rel="noopener noreferrer">
+            {upcoming ? 'Buka Weaver.app' : 'Pindah sekarang'}
+          </a>
+        </div>
+      </div>
+    </div>
   );
 }
 

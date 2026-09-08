@@ -338,6 +338,21 @@ p { margin: 0; color: var(--muted); }
   border-radius: var(--radius-sm); background: var(--brand-soft); color: var(--brand-dark);
   box-shadow: var(--shadow-md); font-size: 13px; font-weight: 600;
 }
+.domain-notice-modal { width: min(500px, 100%); }
+.domain-notice-body { padding: 28px 26px 22px; text-align: center; }
+.domain-notice-kicker { color: var(--brand); font-size: 11px; font-weight: 800; letter-spacing: .16em; margin-bottom: 8px; }
+.domain-notice-body h2 { font-size: 21px; margin-bottom: 10px; }
+.domain-notice-body p { color: var(--ink2); line-height: 1.65; }
+.domain-url {
+  display: inline-flex; align-items: center; margin: 20px 0 10px; padding: 11px 16px;
+  border: 1px solid var(--brand-border); border-radius: var(--radius-sm);
+  background: var(--brand-soft); color: var(--brand); font-size: 16px; font-weight: 700;
+  text-decoration: none; box-shadow: inset 0 -1px 0 rgba(0,0,0,.06);
+}
+.domain-url:hover { border-color: var(--brand); text-decoration: underline; }
+.domain-url-prefix { color: var(--muted); font-weight: 500; }
+.domain-bookmark-hint { font-size: 12px; color: var(--muted) !important; }
+.domain-notice-footer { justify-content: flex-end; }
 
 .entry-list { padding: 16px 22px; display: grid; gap: 12px; }
 .entry-row {
