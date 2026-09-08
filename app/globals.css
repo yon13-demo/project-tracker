@@ -84,13 +84,13 @@ p { margin: 0; color: var(--muted); }
   color: var(--ink);
 }
 .brand-mark {
-  width: 42px; height: 42px;
+  width: 58px; height: 58px;
   display: grid; place-items: center;
 }
 .brand-lockup { display: grid; gap: 1px; line-height: 1; }
-.brand-name { display: flex; align-items: baseline; font-size: 20px; font-weight: 800; letter-spacing: .02em; }
+.brand-name { display: flex; align-items: baseline; font-size: 28px; font-weight: 800; letter-spacing: .02em; }
 .brand-app { display: inline-flex; align-items: center; margin-left: 2px; padding: 3px 4px 2px; border-radius: 3px; background: #2563eb; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: 0; line-height: 1; }
-.brand-tagline { color: var(--muted); font-size: 9px; font-weight: 600; letter-spacing: .015em; white-space: nowrap; }
+.brand-tagline { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .015em; white-space: nowrap; }
 .top-actions { display: flex; gap: 8px; align-items: center; }
 
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */
@@ -507,7 +507,9 @@ tbody tr:hover { background: #fafbff; }
     gap: 10px;
   }
   .brand { font-size: 16px; }
-  .brand-mark { width: 44px; height: 44px; }
+  .brand-mark { width: 52px; height: 52px; }
+  .brand-name { font-size: 25px; }
+  .brand-tagline { font-size: 11px; }
   .top-actions { gap: 6px; flex-wrap: wrap; }
 
   /* Stats */
@@ -578,7 +580,9 @@ tbody tr:hover { background: #fafbff; }
   /* Very small phones */
   .shell { padding: 0 10px 60px; }
   .brand { font-size: 14px; gap: 8px; }
-  .brand-mark { width: 36px; height: 36px; }
+  .brand-mark { width: 46px; height: 46px; }
+  .brand-name { font-size: 22px; }
+  .brand-tagline { font-size: 10px; }
   .stats-row { grid-template-columns: 1fr; }
   .stats-row .stat-card:last-child { grid-column: unset; }
   .stat-number { font-size: 28px; }

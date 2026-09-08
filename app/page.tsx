@@ -610,7 +610,7 @@ export default function Home() {
 function SiteFooter({ t }: { t?: any }) {
   return (
     <footer className="site-footer">
-      <div className="footer-copyright">© 2026 WEAVE.app</div>
+      <div className="footer-copyright">© 2026 WEAVE</div>
       <div className="footer-support">
         <span className="footer-support-icon"><Mail size={13} /></span>
         <span className="footer-support-label">{t?.support || 'Support'}</span>
@@ -653,7 +653,7 @@ function Brand() {
         <Image src="/logo/weaver-icon.svg" alt="Weave" width={42} height={42} style={{ objectFit: 'contain' }} />
       </span>
       <span className="brand-lockup">
-        <span className="brand-name">WEAVE<span className="brand-app">.app</span></span>
+        <span className="brand-name">WEAVE</span>
         <span className="brand-tagline">work, woven together.</span>
       </span>
     </div>
