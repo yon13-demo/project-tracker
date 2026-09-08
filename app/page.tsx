@@ -237,8 +237,7 @@ export default function Home() {
     const today = new Date();
     const launchDate = new Date('2026-09-10T00:00:00');
     const shutdownDate = new Date('2026-10-01T00:00:00');
-    if (today < launchDate) setDomainNotice('upcoming');
-    else if (today < shutdownDate && adminSettings.main_domain) setDomainNotice('migration');
+    if (today >= launchDate && today < shutdownDate && adminSettings.main_domain) setDomainNotice('migration');
   }, [settingsLoaded, adminSettings.main_domain]);
 
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -550,12 +549,7 @@ export default function Home() {
   return (
     <main className="shell">
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">
-            <Image src="/logo/weaver.svg" alt="Weaver" width={56} height={56} style={{ objectFit: 'contain' }} />
-          </span>
-          {t.app}
-        </div>
+        <Brand />
         <div className="top-actions">
           <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
             <Globe2 size={14} /> {lang === 'id' ? 'EN' : 'ID'}
@@ -650,6 +644,20 @@ function MaintenanceView({ t, onLogout }: { t: any; onLogout: () => void }) {
   );
 }
 
+function Brand() {
+  return (
+    <div className="brand">
+      <span className="brand-mark">
+        <Image src="/logo/weaver-icon.svg" alt="Weave" width={42} height={42} style={{ objectFit: 'contain' }} />
+      </span>
+      <span className="brand-lockup">
+        <span className="brand-name">WEAVE<span className="brand-app">.app</span></span>
+        <span className="brand-tagline">work, woven together.</span>
+      </span>
+    </div>
+  );
+}
+
 function DomainNotice({ notice, mainDomain, onClose }: { notice: 'upcoming' | 'migration' | null; mainDomain: string; onClose: () => void }) {
   if (!notice) return null;
   const upcoming = notice === 'upcoming';
@@ -686,12 +694,7 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSet
   return (
     <main className="shell auth-shell">
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">
-            <Image src="/logo/weaver.svg" alt="Weaver" width={56} height={56} style={{ objectFit: 'contain' }} />
-          </span>
-          {t.app}
-        </div>
+        <Brand />
         <div className="top-actions">
           <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
             <Globe2 size={14} /> {lang === 'id' ? 'EN' : 'ID'}

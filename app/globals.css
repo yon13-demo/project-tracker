@@ -79,17 +79,18 @@ p { margin: 0; color: var(--muted); }
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -.5px;
   color: var(--ink);
 }
 .brand-mark {
-  width: 64px; height: 64px;
+  width: 42px; height: 42px;
   display: grid; place-items: center;
 }
+.brand-lockup { display: grid; gap: 1px; line-height: 1; }
+.brand-name { display: flex; align-items: baseline; font-size: 20px; font-weight: 800; letter-spacing: .02em; }
+.brand-app { display: inline-flex; align-items: center; margin-left: 2px; padding: 3px 4px 2px; border-radius: 3px; background: #2563eb; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: 0; line-height: 1; }
+.brand-tagline { color: var(--muted); font-size: 9px; font-weight: 600; letter-spacing: .015em; white-space: nowrap; }
 .top-actions { display: flex; gap: 8px; align-items: center; }
 
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */

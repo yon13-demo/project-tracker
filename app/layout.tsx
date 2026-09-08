@@ -1,7 +1,7 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 
-export const metadata: Metadata = { title: 'Weaver', description: 'Project completion tracker' };
+export const metadata: Metadata = { title: 'WEAVE.app', description: 'Work, woven together.' };
 
 export const viewport: Viewport = {
   width: 'device-width',
