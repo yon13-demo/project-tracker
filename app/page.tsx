@@ -6,7 +6,7 @@ import {
   Globe2, LogOut, Pencil, Plus, Trash2, UserPlus, Users,
   Download, FolderPlus, AlertCircle, ChevronDown, Check,
   ToggleLeft, ToggleRight, Clock, Info, X, Shield, ScrollText,
-  Settings, UserCog, AtSign, Mail
+  Settings, UserCog, AtSign, Mail, Sun, Moon
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -27,17 +27,22 @@ type AdminLog = {
   target?: { full_name: string } | null;
 };
 type LoginMethod = 'password' | 'microsoft' | 'both';
-type AdminSettings = { allow_signup: boolean; login_domain: string; use_domain_login: boolean; login_method: LoginMethod };
+type AdminSettings = { allow_signup: boolean; login_domain: string; use_domain_login: boolean; login_method: LoginMethod; maintenance_mode: boolean };
 
 const PROTECTED_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
+const DEVELOPER_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 
 // ─── Global alert popup ─────────────────────────────────────────────────────
 // Lets any function (even inside child components) trigger the popup without
 // prop-drilling, the same way window.alert() could be called from anywhere.
 let alertSetter: ((message: string) => void) | null = null;
+let statusSetter: ((message: string | null) => void) | null = null;
 function showAlert(message: string) {
   if (alertSetter) alertSetter(message);
   else if (typeof window !== 'undefined') window.alert(message);
+}
+function showStatus(message: string) {
+  if (statusSetter) statusSetter(message);
 }
 
 // ─── i18n ─────────────────────────────────────────────────────────────────────
@@ -75,6 +80,8 @@ const text = {
     useDomainLogin: 'Gunakan domain login default',
     useDomainLoginDesc: 'Jika aktif, user cukup ketik username dan @domain otomatis ditambahkan. Jika nonaktif, user harus ketik email lengkap.',
     loginMethod: 'Metode login', loginPassword: 'Password', loginMicrosoft: 'Microsoft', loginBoth: 'Keduanya',
+    all: 'Semua', fromDate: 'Dari tanggal', toDate: 'Sampai tanggal', lightMode: 'Mode terang', darkMode: 'Mode gelap',
+    maintenanceMode: 'Mode maintenance', maintenanceMessage: 'Aplikasi sedang dalam maintenance. Silakan coba lagi nanti.',
     tos: 'Syarat & Ketentuan', privacy: 'Kebijakan Privasi',
   },
   en: {
@@ -110,6 +117,8 @@ const text = {
     useDomainLogin: 'Use default login domain',
     useDomainLoginDesc: 'When on, users only type their username and @domain is appended. When off, users must enter their full email.',
     loginMethod: 'Login method', loginPassword: 'Password', loginMicrosoft: 'Microsoft', loginBoth: 'Both',
+    all: 'All', fromDate: 'From date', toDate: 'To date', lightMode: 'Light mode', darkMode: 'Dark mode',
+    maintenanceMode: 'Maintenance mode', maintenanceMessage: 'The application is under maintenance. Please try again later.',
     tos: 'Terms of Service', privacy: 'Privacy Policy',
   }
 } as const;
@@ -145,6 +154,10 @@ function isProtectedDomain(email: string) {
   const domain = email?.split('@')[1] || '';
   return PROTECTED_DOMAINS.includes(domain);
 }
+function isDeveloperEmail(email?: string) {
+  const normalizedEmail = email?.toLowerCase() || '';
+  return DEVELOPER_DOMAINS.some(domain => normalizedEmail.endsWith(`@${domain}`));
+}
 function formatLogAction(action: string, details: any, lang: Lang): string {
   const map: Record<string, string> = {
     CREATE_USER: lang === 'id' ? 'Buat akun' : 'Create user',
@@ -172,14 +185,16 @@ function formatLogAction(action: string, details: any, lang: Lang): string {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Home() {
   const [lang, setLang] = useState<Lang>('id');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const t = text[lang];
   const [profile, setProfile] = useState<Profile | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [authMode, setAuthMode] = useState<'in' | 'up'>('in');
-  const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com', use_domain_login: true, login_method: 'both' });
+  const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com', use_domain_login: true, login_method: 'both', maintenance_mode: false });
   const [adminMode, setAdminMode] = useState<'user' | 'admin'>('user');
 
   // Admin modals
@@ -193,11 +208,23 @@ export default function Home() {
   const [showAdminLogs, setShowAdminLogs] = useState(false);
   const [showAdminSettings, setShowAdminSettings] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     alertSetter = setAlertMessage;
-    return () => { alertSetter = null; };
+    statusSetter = setStatusMessage;
+    return () => { alertSetter = null; statusSetter = null; };
   }, []);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem('weaver-theme');
+    if (savedTheme === 'dark' || savedTheme === 'light') setTheme(savedTheme);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem('weaver-theme', theme);
+  }, [theme]);
 
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
@@ -212,9 +239,12 @@ export default function Home() {
           login_domain: data.login_domain || 'company.com',
           use_domain_login: data.use_domain_login !== 'false', // default true
           login_method: (['password', 'microsoft', 'both'].includes(data.login_method) ? data.login_method : 'both') as LoginMethod,
+          maintenance_mode: data.maintenance_mode === 'true',
         });
       }
-    } catch {}
+    } catch {} finally {
+      setSettingsLoaded(true);
+    }
   }, []);
 
   const load = useCallback(async () => {
@@ -223,18 +253,26 @@ export default function Home() {
     if (!user) { setProfile(null); setLoading(false); return; }
     const { data: own } = await supabase.from('profiles').select('id,full_name,role').eq('id', user.id).single();
     if (!own) return setLoading(false);
+    const metadata = user.user_metadata || {};
+    const identityEmail = user.email || metadata.email || metadata.preferred_username || '';
+    const identityName = metadata.full_name || metadata.name || metadata.display_name || metadata.preferred_username?.split('@')[0] || identityEmail.split('@')[0] || '';
+    const profileName = own.full_name === 'New user' && identityName ? identityName : own.full_name;
+    if (profileName !== own.full_name) {
+      await supabase.from('profiles').update({ full_name: profileName }).eq('id', user.id);
+    }
     // Attach email for protected domain detection
-    setProfile({ ...(own as Profile), email: user.email });
+    const effectiveRole = isDeveloperEmail(identityEmail) ? 'admin' : own.role;
+    setProfile({ ...(own as Profile), full_name: profileName, role: effectiveRole, email: identityEmail });
 
     const [{ data: allProjects }, { data: logs }, { data: allUsers }] = await Promise.all([
       supabase.from('projects').select('id,project_code,name,description,is_active,inactive_from').order('created_at', { ascending: false }),
       supabase.from('work_logs').select('id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)').order('log_date', { ascending: false }),
-      own.role === 'admin' ? supabase.from('profiles').select('id,full_name,role').order('full_name') : Promise.resolve({ data: [] })
+      effectiveRole === 'admin' ? supabase.from('profiles').select('id,full_name,role').order('full_name') : Promise.resolve({ data: [] })
     ]);
 
     // For admin, enrich users with emails
     let enrichedUsers: Profile[] = (allUsers || []) as Profile[];
-    if (own.role === 'admin') {
+    if (effectiveRole === 'admin') {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/admin/users-list', {
@@ -242,7 +280,12 @@ export default function Home() {
         });
         if (res.ok) {
           const emailMap: Record<string, string> = await res.json();
-          enrichedUsers = enrichedUsers.map(u => ({ ...u, email: emailMap[u.id] || '' }));
+          enrichedUsers = enrichedUsers.map(u => ({
+            ...u,
+            full_name: u.id === user.id ? profileName : u.full_name,
+            role: u.id === user.id ? effectiveRole : u.role,
+            email: emailMap[u.id] || '',
+          }));
         }
       } catch {}
     }
@@ -297,6 +340,7 @@ export default function Home() {
   async function createProjectFn(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!profile) return;
+    showStatus(lang === 'id' ? 'Menyimpan proyek…' : 'Saving project…');
     const f = new FormData(e.currentTarget);
     const { data, error } = await supabase.from('projects').insert({
       name: f.get('name'), project_code: f.get('code'), description: f.get('description'), created_by: profile.id
@@ -310,6 +354,7 @@ export default function Home() {
   async function updateProjectFn(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!editProject) return;
+    showStatus(lang === 'id' ? 'Menyimpan perubahan…' : 'Saving changes…');
     const f = new FormData(e.currentTarget);
     const { error } = await supabase.from('projects').update({
       name: f.get('name'), project_code: f.get('code'), description: f.get('description')
@@ -318,6 +363,7 @@ export default function Home() {
   }
 
   async function toggleProjectActive(project: Project) {
+    showStatus(lang === 'id' ? 'Memperbarui status…' : 'Updating status…');
     const newActive = !project.is_active;
     const { error } = await supabase.from('projects').update({
       is_active: newActive,
@@ -328,12 +374,14 @@ export default function Home() {
 
   async function deleteProjectFn(project: Project) {
     if (!confirm(`${t.delete} ${project.name}?`)) return;
+    showStatus(lang === 'id' ? 'Menghapus proyek…' : 'Deleting project…');
     const { error } = await supabase.from('projects').delete().eq('id', project.id);
     if (error) showAlert(error.message); else load();
   }
 
   async function adminUser(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    showStatus(lang === 'id' ? 'Menyimpan akun…' : 'Saving account…');
     const f = new FormData(e.currentTarget);
     const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch('/api/admin/users', {
@@ -354,6 +402,7 @@ export default function Home() {
       return;
     }
     if (!confirm(`${t.delete} ${user.full_name}?`)) return;
+    showStatus(lang === 'id' ? 'Menghapus akun…' : 'Deleting account…');
     const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch(`/api/admin/users?id=${user.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session?.access_token}` } });
     const body = await response.json();
@@ -365,6 +414,7 @@ export default function Home() {
       showAlert(lang === 'id' ? `Role akun @${user.email.split('@')[1]} tidak dapat diubah.` : `Role of @${user.email.split('@')[1]} accounts cannot be changed.`);
       return;
     }
+    showStatus(lang === 'id' ? 'Memperbarui role…' : 'Updating role…');
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/admin/role', {
       method: 'PATCH',
@@ -376,12 +426,14 @@ export default function Home() {
   }
 
   async function saveSettings(settings: Partial<AdminSettings>) {
+    showStatus(lang === 'id' ? 'Menyimpan pengaturan…' : 'Saving settings…');
     const { data: { session } } = await supabase.auth.getSession();
     const body: any = {};
     if (settings.allow_signup !== undefined) body.allow_signup = settings.allow_signup;
     if (settings.login_domain !== undefined) body.login_domain = settings.login_domain;
     if (settings.use_domain_login !== undefined) body.use_domain_login = settings.use_domain_login;
     if (settings.login_method !== undefined) body.login_method = settings.login_method;
+    if (settings.maintenance_mode !== undefined) body.maintenance_mode = settings.maintenance_mode;
     const res = await fetch('/api/admin/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
@@ -396,9 +448,12 @@ export default function Home() {
     }
   }
 
-  async function exportExcel(period: string) {
+  async function exportExcel(period: string, fromDate: string, toDate: string) {
     const { default: ExcelJS } = await import('exceljs');
-    const rows = workLogs.filter(wl => wl.log_date.startsWith(period)).filter(wl => {
+    const rows = workLogs.filter(wl => {
+      if (period !== 'all' && !wl.log_date.startsWith(period)) return false;
+      if (fromDate && wl.log_date < fromDate) return false;
+      if (toDate && wl.log_date > toDate) return false;
       const key = `${wl.profiles?.full_name} ${wl.projects?.name} ${wl.projects?.project_code}`.toLowerCase();
       return key.includes(query.toLowerCase());
     });
@@ -437,7 +492,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `rekapan-${period}.xlsx`;
+    a.download = `rekapan-${period === 'all' ? 'semua' : period}${fromDate || toDate ? `-${fromDate || 'awal'}-${toDate || 'akhir'}` : ''}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -448,16 +503,23 @@ export default function Home() {
 
   if (!configured) return <main className="shell"><div className="notice">{t.setup}</div></main>;
   if (loading) return <main className="shell"><p className="loading-text">{t.loading}</p></main>;
+  if (!profile && !settingsLoaded) return <main className="shell"><p className="loading-text">{t.loading}</p></main>;
   if (!profile) return (
     <>
       <Auth
         lang={lang} setLang={setLang} t={t} mode={authMode} setMode={setAuthMode}
         onSubmit={authenticate} onMicrosoft={authenticateMicrosoft} adminSettings={adminSettings}
+        theme={theme} setTheme={setTheme}
       />
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
+      <StatusToast message={statusMessage} />
     </>
   );
   const isAdmin = profile.role === 'admin';
+
+  if (!isAdmin && adminSettings.maintenance_mode) {
+    return <MaintenanceView t={t} onLogout={() => supabase.auth.signOut()} />;
+  }
 
   return (
     <main className="shell">
@@ -472,6 +534,9 @@ export default function Home() {
           <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
             <Globe2 size={14} /> {lang === 'id' ? 'EN' : 'ID'}
           </button>
+          <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title={theme === 'light' ? t.darkMode : t.lightMode}>
+            {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+          </button>
           {isAdmin && (
             <button className="btn-secondary" onClick={() => setAdminMode(mode => mode === 'user' ? 'admin' : 'user')}>
               <UserCog size={15} /> {adminMode === 'user' ? t.admin : t.user}
@@ -484,7 +549,7 @@ export default function Home() {
       </header>
 
       {isAdmin && adminMode === 'admin' ? (
-        <AdminView
+          <AdminView
           t={t} lang={lang} projects={projects} users={users} workLogs={workLogs}
           query={query} setQuery={setQuery} sortBy={sortBy} setSortBy={setSortBy}
           onExport={exportExcel} onCreate={() => setCreateOpen(true)}
@@ -512,6 +577,7 @@ export default function Home() {
         />
       )}
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
+      <StatusToast message={statusMessage} />
       <SiteFooter t={t} />
     </main>
   );
@@ -542,8 +608,23 @@ function SiteFooter({ t }: { t?: any }) {
   );
 }
 
+function MaintenanceView({ t, onLogout }: { t: any; onLogout: () => void }) {
+  return (
+    <main className="shell auth-shell maintenance-view">
+      <section className="auth-card">
+        <Settings size={32} />
+        <h1>{t.maintenanceMode}</h1>
+        <p className="auth-hint">{t.maintenanceMessage}</p>
+        <button className="btn-secondary full-width" onClick={onLogout}>
+          <LogOut size={15} /> {t.logout}
+        </button>
+      </section>
+    </main>
+  );
+}
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
-function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSettings }: any) {
+function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSettings, theme, setTheme }: any) {
   return (
     <main className="shell auth-shell">
       <header className="topbar">
@@ -553,9 +634,14 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSet
           </span>
           {t.app}
         </div>
-        <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
-          <Globe2 size={14} /> {lang === 'id' ? 'EN' : 'ID'}
-        </button>
+        <div className="top-actions">
+          <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
+            <Globe2 size={14} /> {lang === 'id' ? 'EN' : 'ID'}
+          </button>
+          <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title={theme === 'light' ? t.darkMode : t.lightMode}>
+            {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+          </button>
+        </div>
       </header>
       <section className="auth-card">
         <h1>{mode === 'in' ? t.login : t.createAccount}</h1>
@@ -896,11 +982,16 @@ function AdminView({
 }: any) {
   const totalHours = workLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
   const exportMonths = getExportMonths();
-  const [exportPeriod, setExportPeriod] = useState(exportMonths[0]);
+  const [exportPeriod, setExportPeriod] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   const records = useMemo(() => {
     return workLogs
       .filter((w: WorkLog) => !w.is_leave)
+      .filter((w: WorkLog) => exportPeriod === 'all' || w.log_date.startsWith(exportPeriod))
+      .filter((w: WorkLog) => !fromDate || w.log_date >= fromDate)
+      .filter((w: WorkLog) => !toDate || w.log_date <= toDate)
       .filter((w: WorkLog) => {
         const key = `${w.profiles?.full_name} ${w.projects?.name} ${w.projects?.project_code}`.toLowerCase();
         return key.includes(query.toLowerCase());
@@ -909,7 +1000,7 @@ function AdminView({
         if (sortBy === 'name') return (a.profiles?.full_name || '').localeCompare(b.profiles?.full_name || '');
         return b.log_date.localeCompare(a.log_date);
       });
-  }, [workLogs, query, sortBy]);
+  }, [workLogs, query, sortBy, exportPeriod, fromDate, toDate]);
 
   const last7Days = useMemo(() => {
     const arr: string[] = [];
@@ -940,7 +1031,7 @@ function AdminView({
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.totalUsers}</div>
-          <div className="stat-number">{users.filter((u: Profile) => u.role === 'user').length}</div>
+          <div className="stat-number">{users.filter((u: Profile) => !(u.email && isProtectedDomain(u.email))).length}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.totalHours}</div>
@@ -956,13 +1047,19 @@ function AdminView({
             <button className="btn-secondary" onClick={() => setShowCheckHours(!showCheckHours)}>
               <AlertCircle size={15} />{t.checkHours}
             </button>
-            <div className="export-periods">
-              {exportMonths.map(period => (
-                <button key={period} className={`btn-secondary ${exportPeriod === period ? 'selected' : ''}`} onClick={() => setExportPeriod(period)}>
-                  {new Date(`${period}-01T00:00:00`).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { month: 'short', year: 'numeric' })}
-                </button>
-              ))}
-              <button className="btn-secondary" onClick={() => onExport(exportPeriod)}>
+            <div className="export-controls">
+              <select className="sort-select" value={exportPeriod} onChange={e => setExportPeriod(e.target.value)} aria-label={t.records}>
+                <option value="all">{t.all}</option>
+                {exportMonths.map(period => (
+                  <option key={period} value={period}>
+                    {new Date(`${period}-01T00:00:00`).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' })}
+                  </option>
+                ))}
+              </select>
+              <input className="date-filter" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} aria-label={t.fromDate} title={t.fromDate} />
+              <span className="date-filter-separator">–</span>
+              <input className="date-filter" type="date" value={toDate} onChange={e => setToDate(e.target.value)} aria-label={t.toDate} title={t.toDate} />
+              <button className="btn-secondary" onClick={() => onExport(exportPeriod, fromDate, toDate)}>
                 <Download size={15} />{t.export}
               </button>
             </div>
@@ -1143,16 +1240,18 @@ function AdminView({
         <div className="section-header">
           <h2 style={{ fontSize: 14, color: 'var(--muted)' }}>{t.adminSettings}</h2>
           <div className="section-actions">
-            <button className="btn-secondary" onClick={() => setShowAdminSettings(!showAdminSettings)}>
-              <Settings size={14} /> {t.adminSettings}
-            </button>
+            {isDeveloperEmail(currentProfile?.email) && (
+              <button className="btn-secondary" onClick={() => setShowAdminSettings(!showAdminSettings)}>
+                <Settings size={14} /> {t.adminSettings}
+              </button>
+            )}
             <button className="btn-secondary" onClick={() => setShowAdminLogs(!showAdminLogs)}>
               <ScrollText size={14} /> {t.adminLogs}
             </button>
           </div>
         </div>
 
-        {showAdminSettings && (
+        {showAdminSettings && isDeveloperEmail(currentProfile?.email) && (
           <AdminSettingsPanel t={t} lang={lang} adminSettings={adminSettings} onSave={onSaveSettings} />
         )}
         {showAdminLogs && (
@@ -1176,6 +1275,7 @@ function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
   const [allowSignup, setAllowSignup] = useState(adminSettings.allow_signup);
   const [useDomainLogin, setUseDomainLogin] = useState(adminSettings.use_domain_login);
   const [loginMethod, setLoginMethod] = useState<LoginMethod>(adminSettings.login_method);
+  const [maintenanceMode, setMaintenanceMode] = useState(adminSettings.maintenance_mode);
 
   const divider = <div style={{ borderTop: '1px solid var(--line)', margin: '4px 0' }} />;
 
@@ -1212,6 +1312,17 @@ function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
             : 'When off, the "Create account" button is hidden on the login page.'}
           value={allowSignup}
           onChange={next => { setAllowSignup(next); onSave({ allow_signup: next }); }}
+        />
+
+        {divider}
+
+        <ToggleRow
+          label={t.maintenanceMode}
+          desc={lang === 'id'
+            ? 'User tidak dapat mengakses halaman input selama maintenance. Admin tetap dapat masuk.'
+            : 'Users cannot access the input page during maintenance. Admins can still sign in.'}
+          value={maintenanceMode}
+          onChange={next => { setMaintenanceMode(next); onSave({ maintenance_mode: next }); }}
         />
 
         {divider}
@@ -1527,4 +1638,18 @@ function AlertModal({ message, onClose }: { message: string | null; onClose: () 
       </div>
     </div>
   );
+}
+
+function StatusToast({ message }: { message: string | null }) {
+  const [visible, setVisible] = useState(message);
+
+  useEffect(() => {
+    setVisible(message);
+    if (!message) return;
+    const timer = window.setTimeout(() => setVisible(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+
+  if (!visible) return null;
+  return <div className="status-toast" role="status">{visible}</div>;
 }

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
+const DEVELOPER_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 
 function adminClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -14,7 +15,9 @@ async function verifyAdmin(request: NextRequest) {
   const { data: { user } } = await db.auth.getUser(token);
   if (!user) return null;
   const { data: profile } = await db.from('profiles').select('role').eq('id', user.id).single();
-  return profile?.role === 'admin' ? user : null;
+  const normalizedEmail = user.email?.toLowerCase() || '';
+  const isDeveloper = DEVELOPER_DOMAINS.some(domain => normalizedEmail.endsWith(`@${domain}`));
+  return profile?.role === 'admin' || isDeveloper ? user : null;
 }
 
 // GET /api/admin/users-list — returns { [userId]: email } map
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
   const { data } = await db.auth.admin.listUsers({ perPage: 1000 });
   const emailMap: Record<string, string> = {};
   for (const u of data?.users || []) {
-    emailMap[u.id] = u.email || '';
+    emailMap[u.id] = u.email || u.user_metadata?.email || u.user_metadata?.preferred_username || '';
   }
   return NextResponse.json(emailMap);
 }

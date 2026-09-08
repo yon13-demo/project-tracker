@@ -16,7 +16,8 @@ insert into public.admin_settings (key, value) values
   ('allow_signup', 'true'),
   ('login_domain', 'company.com'),
   ('use_domain_login', 'true'),
-  ('login_method', 'both')
+  ('login_method', 'both'),
+  ('maintenance_mode', 'false')
 on conflict (key) do nothing;
 
 -- Keep the display name from Microsoft/Azure OAuth metadata when a profile is created.
@@ -28,6 +29,9 @@ begin
     coalesce(
       nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''),
       nullif(trim(new.raw_user_meta_data ->> 'name'), ''),
+      nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''),
+      nullif(trim(new.raw_user_meta_data ->> 'preferred_username'), ''),
+      nullif(trim(new.raw_user_meta_data ->> 'email'), ''),
       split_part(new.email, '@', 1),
       'New user'
     )
@@ -38,6 +42,20 @@ exception when others then
   raise;
 end;
 $$;
+
+-- Repair profiles created before the provider metadata fallback was expanded.
+update public.profiles p
+set full_name = coalesce(
+  nullif(trim(u.raw_user_meta_data ->> 'full_name'), ''),
+  nullif(trim(u.raw_user_meta_data ->> 'name'), ''),
+  nullif(trim(u.raw_user_meta_data ->> 'display_name'), ''),
+  nullif(trim(u.raw_user_meta_data ->> 'preferred_username'), ''),
+  nullif(trim(u.raw_user_meta_data ->> 'email'), ''),
+  split_part(u.email, '@', 1),
+  p.full_name
+)
+from auth.users u
+where p.id = u.id and p.full_name = 'New user';
 
 -- ─── Admin Logs ────────────────────────────────────────────────────────────────
 create table if not exists public.admin_logs (
