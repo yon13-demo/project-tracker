@@ -32,6 +32,7 @@ begin
       nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''),
       nullif(trim(new.raw_user_meta_data ->> 'preferred_username'), ''),
       nullif(trim(new.raw_user_meta_data ->> 'email'), ''),
+      nullif(trim(new.raw_user_meta_data ->> 'userPrincipalName'), ''),
       split_part(new.email, '@', 1),
       'New user'
     )
@@ -51,6 +52,7 @@ set full_name = coalesce(
   nullif(trim(u.raw_user_meta_data ->> 'display_name'), ''),
   nullif(trim(u.raw_user_meta_data ->> 'preferred_username'), ''),
   nullif(trim(u.raw_user_meta_data ->> 'email'), ''),
+  nullif(trim(u.raw_user_meta_data ->> 'userPrincipalName'), ''),
   split_part(u.email, '@', 1),
   p.full_name
 )

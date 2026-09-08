@@ -254,8 +254,11 @@ export default function Home() {
     const { data: own } = await supabase.from('profiles').select('id,full_name,role').eq('id', user.id).single();
     if (!own) return setLoading(false);
     const metadata = user.user_metadata || {};
-    const identityEmail = user.email || metadata.email || metadata.preferred_username || '';
-    const identityName = metadata.full_name || metadata.name || metadata.display_name || metadata.preferred_username?.split('@')[0] || identityEmail.split('@')[0] || '';
+    const identityData = user.identities?.[0]?.identity_data || {};
+    const identityEmail = user.email || metadata.email || metadata.preferred_username || identityData.email || identityData.preferred_username || '';
+    const identityName = metadata.full_name || metadata.name || metadata.display_name || metadata.preferred_username
+      || identityData.full_name || identityData.name || identityData.display_name || identityData.preferred_username?.split('@')[0]
+      || identityEmail.split('@')[0] || '';
     const profileName = own.full_name === 'New user' && identityName ? identityName : own.full_name;
     if (profileName !== own.full_name) {
       await supabase.from('profiles').update({ full_name: profileName }).eq('id', user.id);
