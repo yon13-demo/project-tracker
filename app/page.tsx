@@ -650,7 +650,7 @@ function Brand() {
   return (
     <div className="brand">
       <span className="brand-mark">
-        <Image src="/logo/weaver-icon.svg" alt="Weave" width={42} height={42} style={{ objectFit: 'contain' }} />
+        <Image src="/logo/weaver-icon.svg" alt="WEAVE" width={64} height={64} style={{ objectFit: 'contain' }} />
       </span>
       <span className="brand-lockup">
         <span className="brand-name">WEAVE</span>

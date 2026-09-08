@@ -15,7 +15,7 @@ export default function TermsOfService() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">
-            <Image src="/logo/weaver-icon.svg" alt="WEAVE" width={58} height={58} style={{ objectFit: 'contain' }} />
+            <Image src="/logo/weaver-icon.svg" alt="WEAVE" width={64} height={64} style={{ objectFit: 'contain' }} />
           </span>
           <span className="brand-lockup"><span className="brand-name">WEAVE</span><span className="brand-tagline">work, woven together.</span></span>
         </div>
