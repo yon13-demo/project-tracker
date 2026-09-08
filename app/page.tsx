@@ -258,6 +258,8 @@ export default function Home() {
     const identityEmail = user.email || metadata.email || metadata.preferred_username || identityData.email || identityData.preferred_username || '';
     const identityName = metadata.full_name || metadata.name || metadata.display_name || metadata.preferred_username
       || identityData.full_name || identityData.name || identityData.display_name || identityData.preferred_username?.split('@')[0]
+      || [metadata.given_name, metadata.family_name].filter(Boolean).join(' ')
+      || [identityData.given_name, identityData.family_name].filter(Boolean).join(' ')
       || identityEmail.split('@')[0] || '';
     const profileName = own.full_name === 'New user' && identityName ? identityName : own.full_name;
     if (profileName !== own.full_name) {
@@ -335,7 +337,10 @@ export default function Home() {
   async function authenticateMicrosoft() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'azure',
-      options: { redirectTo: `${window.location.origin}/` },
+      options: {
+        redirectTo: `${window.location.origin}/`,
+        scopes: 'openid profile email User.Read',
+      },
     });
     if (error) showAlert(error.message);
   }
