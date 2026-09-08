@@ -26,7 +26,8 @@ type AdminLog = {
   admin?: { full_name: string } | null;
   target?: { full_name: string } | null;
 };
-type AdminSettings = { allow_signup: boolean; login_domain: string; use_domain_login: boolean };
+type LoginMethod = 'password' | 'microsoft' | 'both';
+type AdminSettings = { allow_signup: boolean; login_domain: string; use_domain_login: boolean; login_method: LoginMethod };
 
 const PROTECTED_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 
@@ -73,6 +74,7 @@ const text = {
     protectedDomain: 'Domain ini terlindungi', settingsSaved: 'Pengaturan disimpan.',
     useDomainLogin: 'Gunakan domain login default',
     useDomainLoginDesc: 'Jika aktif, user cukup ketik username dan @domain otomatis ditambahkan. Jika nonaktif, user harus ketik email lengkap.',
+    loginMethod: 'Metode login', loginPassword: 'Password', loginMicrosoft: 'Microsoft', loginBoth: 'Keduanya',
     tos: 'Syarat & Ketentuan', privacy: 'Kebijakan Privasi',
   },
   en: {
@@ -107,6 +109,7 @@ const text = {
     protectedDomain: 'Domain is protected', settingsSaved: 'Settings saved.',
     useDomainLogin: 'Use default login domain',
     useDomainLoginDesc: 'When on, users only type their username and @domain is appended. When off, users must enter their full email.',
+    loginMethod: 'Login method', loginPassword: 'Password', loginMicrosoft: 'Microsoft', loginBoth: 'Both',
     tos: 'Terms of Service', privacy: 'Privacy Policy',
   }
 } as const;
@@ -120,6 +123,15 @@ function getLast45Days(): string[] {
     days.push(d.toISOString().slice(0, 10));
   }
   return days;
+}
+function getMonthKey(date = new Date()) { return date.toISOString().slice(0, 7); }
+function getExportMonths() {
+  return [0, 1, 2].map(offset => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - offset);
+    return getMonthKey(date);
+  });
 }
 function formatDateDisplay(dateStr: string, lang: Lang): string {
   const d = new Date(dateStr + 'T00:00:00');
@@ -167,7 +179,8 @@ export default function Home() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(false);
   const [authMode, setAuthMode] = useState<'in' | 'up'>('in');
-  const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com', use_domain_login: true });
+  const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com', use_domain_login: true, login_method: 'both' });
+  const [adminMode, setAdminMode] = useState<'user' | 'admin'>('user');
 
   // Admin modals
   const [createOpen, setCreateOpen] = useState(false);
@@ -198,6 +211,7 @@ export default function Home() {
           allow_signup: data.allow_signup === 'true',
           login_domain: data.login_domain || 'company.com',
           use_domain_login: data.use_domain_login !== 'false', // default true
+          login_method: (['password', 'microsoft', 'both'].includes(data.login_method) ? data.login_method : 'both') as LoginMethod,
         });
       }
     } catch {}
@@ -270,6 +284,14 @@ export default function Home() {
       : await supabase.auth.signUp({ email, password, options: { data: { full_name } } });
     if (result.error) showAlert(result.error.message);
     else if (authMode === 'up') showAlert(lang === 'id' ? 'Akun dibuat.' : 'Account created.');
+  }
+
+  async function authenticateMicrosoft() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: { redirectTo: `${window.location.origin}/` },
+    });
+    if (error) showAlert(error.message);
   }
 
   async function createProjectFn(e: React.FormEvent<HTMLFormElement>) {
@@ -359,6 +381,7 @@ export default function Home() {
     if (settings.allow_signup !== undefined) body.allow_signup = settings.allow_signup;
     if (settings.login_domain !== undefined) body.login_domain = settings.login_domain;
     if (settings.use_domain_login !== undefined) body.use_domain_login = settings.use_domain_login;
+    if (settings.login_method !== undefined) body.login_method = settings.login_method;
     const res = await fetch('/api/admin/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
@@ -373,9 +396,9 @@ export default function Home() {
     }
   }
 
-  async function exportExcel() {
+  async function exportExcel(period: string) {
     const { default: ExcelJS } = await import('exceljs');
-    const rows = workLogs.filter(wl => {
+    const rows = workLogs.filter(wl => wl.log_date.startsWith(period)).filter(wl => {
       const key = `${wl.profiles?.full_name} ${wl.projects?.name} ${wl.projects?.project_code}`.toLowerCase();
       return key.includes(query.toLowerCase());
     });
@@ -414,7 +437,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `rekapan-${todayStr()}.xlsx`;
+    a.download = `rekapan-${period}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -429,7 +452,7 @@ export default function Home() {
     <>
       <Auth
         lang={lang} setLang={setLang} t={t} mode={authMode} setMode={setAuthMode}
-        onSubmit={authenticate} adminSettings={adminSettings}
+        onSubmit={authenticate} onMicrosoft={authenticateMicrosoft} adminSettings={adminSettings}
       />
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
     </>
@@ -449,13 +472,18 @@ export default function Home() {
           <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
             <Globe2 size={14} /> {lang === 'id' ? 'EN' : 'ID'}
           </button>
+          {isAdmin && (
+            <button className="btn-secondary" onClick={() => setAdminMode(mode => mode === 'user' ? 'admin' : 'user')}>
+              <UserCog size={15} /> {adminMode === 'user' ? t.admin : t.user}
+            </button>
+          )}
           <button className="icon-button" onClick={() => supabase.auth.signOut()}>
             <LogOut size={15} />{t.logout}
           </button>
         </div>
       </header>
 
-      {isAdmin ? (
+      {isAdmin && adminMode === 'admin' ? (
         <AdminView
           t={t} lang={lang} projects={projects} users={users} workLogs={workLogs}
           query={query} setQuery={setQuery} sortBy={sortBy} setSortBy={setSortBy}
@@ -515,7 +543,7 @@ function SiteFooter({ t }: { t?: any }) {
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
-function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any) {
+function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSettings }: any) {
   return (
     <main className="shell auth-shell">
       <header className="topbar">
@@ -532,7 +560,7 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any)
       <section className="auth-card">
         <h1>{mode === 'in' ? t.login : t.createAccount}</h1>
         <p className="auth-hint">{t.authHint}</p>
-        <form onSubmit={onSubmit}>
+        {adminSettings.login_method !== 'microsoft' && <form onSubmit={onSubmit}>
           {mode === 'up' && <div className="field"><label htmlFor="auth-full-name">{t.name}</label><input id="auth-full-name" required name="full_name" /></div>}
           {mode === 'up' ? (
             <div className="field"><label htmlFor="auth-email">{t.email}</label><input id="auth-email" required name="email" type="email" /></div>
@@ -559,7 +587,12 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, adminSettings }: any)
           )}
           <div className="field"><label htmlFor="auth-password">{t.password}</label><input id="auth-password" required name="password" type="password" minLength={6} /></div>
           <button className="btn-primary full-width" type="submit">{mode === 'in' ? t.signIn : t.signUp}</button>
-        </form>
+        </form>}
+        {adminSettings.login_method !== 'password' && (
+          <button className="btn-secondary full-width" type="button" onClick={onMicrosoft}>
+            <AtSign size={15} /> {lang === 'id' ? 'Masuk dengan Microsoft' : 'Login with Microsoft'}
+          </button>
+        )}
         {/* Toggle signup hanya muncul kalau allow_signup aktif */}
         {adminSettings.allow_signup && (
           <p className="auth-toggle">
@@ -601,6 +634,14 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
   const [saving, setSaving] = useState(false);
   const [dateEntries, setDateEntries] = useState<Array<{ tempId: string; project_id: string; hours: string }>>([]);
   const [isLeaveMode, setIsLeaveMode] = useState(false);
+
+  async function handleDeleteDate(date: string) {
+    if (!confirm(`${t.delete} ${formatDateDisplay(date, lang).replace('\n', ' ')}?`)) return;
+    setSaving(true);
+    const { error } = await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', date);
+    setSaving(false);
+    if (error) showAlert(error.message); else onRefresh();
+  }
 
   function openDate(date: string) {
     const existing = logsByDate[date];
@@ -693,7 +734,7 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
                     <td className="empty-row-hint">—</td>
                     <td className="empty-row-hint">—</td>
                     <td><span className="badge-leave">{t.leaveDay}</span></td>
-                    <td><button className="btn-action" onClick={() => openDate(date)}><Pencil size={14} /></button></td>
+                    <td><div className="action-btns"><button className="btn-action" onClick={() => openDate(date)} title={t.edit}><Pencil size={14} /></button><button className="btn-action danger" onClick={() => handleDeleteDate(date)} title={t.delete}><Trash2 size={14} /></button></div></td>
                   </tr>
                 );
               }
@@ -711,7 +752,7 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
                     <td><span className="hours-badge">{entry.hours} jam</span></td>
                     {idx === 0 && (
                       <td rowSpan={dayData.entries.length}>
-                        <button className="btn-action" onClick={() => openDate(date)}><Pencil size={14} /></button>
+                        <div className="action-btns"><button className="btn-action" onClick={() => openDate(date)} title={t.edit}><Pencil size={14} /></button><button className="btn-action danger" onClick={() => handleDeleteDate(date)} title={t.delete}><Trash2 size={14} /></button></div>
                       </td>
                     )}
                   </tr>
@@ -847,6 +888,8 @@ function AdminView({
   adminSettings, onSaveSettings, currentProfile,
 }: any) {
   const totalHours = workLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
+  const exportMonths = getExportMonths();
+  const [exportPeriod, setExportPeriod] = useState(exportMonths[0]);
 
   const records = useMemo(() => {
     return workLogs
@@ -861,9 +904,9 @@ function AdminView({
       });
   }, [workLogs, query, sortBy]);
 
-  const last5Days = useMemo(() => {
+  const last7Days = useMemo(() => {
     const arr: string[] = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 7; i++) {
       const d = new Date(); d.setDate(d.getDate() - i);
       arr.push(d.toISOString().slice(0, 10));
     }
@@ -873,12 +916,12 @@ function AdminView({
   const lowHoursUsers = useMemo(() => {
     const normalUsers = users.filter((u: Profile) => u.role === 'user');
     return normalUsers.map((u: Profile) => {
-      const userLogs = workLogs.filter((w: WorkLog) => w.user_id === u.id && last5Days.includes(w.log_date));
+      const userLogs = workLogs.filter((w: WorkLog) => w.user_id === u.id && last7Days.includes(w.log_date));
       const workHours = userLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
       const hasCuti = userLogs.some((w: WorkLog) => w.is_leave);
       return { user: u, hours: workHours, hasCuti };
     }).filter((x: any) => x.hours < 20);
-  }, [users, workLogs, last5Days]);
+  }, [users, workLogs, last7Days]);
 
   return (
     <div className="admin-view">
@@ -906,9 +949,16 @@ function AdminView({
             <button className="btn-secondary" onClick={() => setShowCheckHours(!showCheckHours)}>
               <AlertCircle size={15} />{t.checkHours}
             </button>
-            <button className="btn-secondary" onClick={onExport}>
-              <Download size={15} />{t.export}
-            </button>
+            <div className="export-periods">
+              {exportMonths.map(period => (
+                <button key={period} className={`btn-secondary ${exportPeriod === period ? 'selected' : ''}`} onClick={() => setExportPeriod(period)}>
+                  {new Date(`${period}-01T00:00:00`).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { month: 'short', year: 'numeric' })}
+                </button>
+              ))}
+              <button className="btn-secondary" onClick={() => onExport(exportPeriod)}>
+                <Download size={15} />{t.export}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -938,7 +988,7 @@ function AdminView({
               </table>
             )}
             {checkHoursDetail && (
-              <CheckHoursDetail t={t} lang={lang} user={checkHoursDetail} workLogs={workLogs} last5Days={last5Days} onClose={() => setCheckHoursDetail(null)} />
+              <CheckHoursDetail t={t} lang={lang} user={checkHoursDetail} workLogs={workLogs} last7Days={last7Days} onClose={() => setCheckHoursDetail(null)} />
             )}
           </div>
         )}
@@ -1118,6 +1168,7 @@ function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
   const [domain, setDomain] = useState(adminSettings.login_domain);
   const [allowSignup, setAllowSignup] = useState(adminSettings.allow_signup);
   const [useDomainLogin, setUseDomainLogin] = useState(adminSettings.use_domain_login);
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>(adminSettings.login_method);
 
   const divider = <div style={{ borderTop: '1px solid var(--line)', margin: '4px 0' }} />;
 
@@ -1155,6 +1206,24 @@ function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
           value={allowSignup}
           onChange={next => { setAllowSignup(next); onSave({ allow_signup: next }); }}
         />
+
+        {divider}
+
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{t.loginMethod}</div>
+          <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>
+            {lang === 'id' ? 'Pilih metode yang tersedia di halaman login.' : 'Choose which login methods are available on the login page.'}
+          </div>
+          <select
+            className="field-input"
+            value={loginMethod}
+            onChange={e => { const value = e.target.value as LoginMethod; setLoginMethod(value); onSave({ login_method: value }); }}
+          >
+            <option value="password">{t.loginPassword}</option>
+            <option value="microsoft">{t.loginMicrosoft}</option>
+            <option value="both">{t.loginBoth}</option>
+          </select>
+        </div>
 
         {divider}
 
@@ -1275,8 +1344,8 @@ function AdminLogsPanel({ t, lang }: any) {
   );
 }
 
-function CheckHoursDetail({ t, lang, user, workLogs, last5Days, onClose }: any) {
-  const userLogs = workLogs.filter((w: WorkLog) => w.user_id === user.id && last5Days.includes(w.log_date));
+function CheckHoursDetail({ t, lang, user, workLogs, last7Days, onClose }: any) {
+  const userLogs = workLogs.filter((w: WorkLog) => w.user_id === user.id && last7Days.includes(w.log_date));
   return (
     <div className="check-detail-panel">
       <div className="check-detail-header">
@@ -1286,7 +1355,7 @@ function CheckHoursDetail({ t, lang, user, workLogs, last5Days, onClose }: any) 
       <table className="check-table">
         <thead><tr><th>{t.tanggal}</th><th>{t.namaProyek}</th><th>{t.jamKerjaHeader}</th></tr></thead>
         <tbody>
-          {last5Days.map((date: string) => {
+          {last7Days.map((date: string) => {
             const dayLogs = userLogs.filter((w: WorkLog) => w.log_date === date);
             if (!dayLogs.length) return (
               <tr key={date}><td>{date}</td><td>—</td><td>—</td></tr>

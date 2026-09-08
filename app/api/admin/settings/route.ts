@@ -44,6 +44,9 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.use_domain_login === 'boolean') {
     updates.push({ key: 'use_domain_login', value: String(body.use_domain_login) });
   }
+  if (['password', 'microsoft', 'both'].includes(body.login_method)) {
+    updates.push({ key: 'login_method', value: body.login_method });
+  }
 
   for (const { key, value } of updates) {
     const { error } = await db.from('admin_settings').upsert(
@@ -58,7 +61,9 @@ export async function PATCH(request: NextRequest) {
     ? 'TOGGLE_SIGNUP'
     : body.use_domain_login !== undefined
       ? 'TOGGLE_DOMAIN_LOGIN'
-      : 'SET_DOMAIN';
+      : body.login_method !== undefined
+        ? 'SET_LOGIN_METHOD'
+        : 'SET_DOMAIN';
   await db.from('admin_logs').insert({
     admin_id: auth.profile.id,
     action,

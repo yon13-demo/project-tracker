@@ -350,6 +350,8 @@ p { margin: 0; color: var(--muted); }
 }
 .section-header h2 { font-size: 15px; letter-spacing: -.35px; }
 .section-actions { display: flex; gap: 8px; }
+.export-periods { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.export-periods .selected { background: var(--brand-soft); border-color: var(--brand-border); color: var(--brand); }
 .toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .search-input {
   flex: 1; min-width: 200px; min-height: 38px;
@@ -469,6 +471,8 @@ tbody tr:hover { background: #fafbff; }
   .section-actions { width: 100%; }
   .section-actions .btn-primary,
   .section-actions .btn-secondary { flex: 1; justify-content: center; }
+  .export-periods { width: 100%; }
+  .export-periods .btn-secondary { flex: 1; justify-content: center; }
 
   /* Toolbar / search */
   .toolbar { flex-direction: column; }
