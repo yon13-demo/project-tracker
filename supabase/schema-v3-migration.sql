@@ -17,7 +17,8 @@ insert into public.admin_settings (key, value) values
   ('login_domain', 'company.com'),
   ('use_domain_login', 'true'),
   ('login_method', 'both'),
-  ('maintenance_mode', 'false')
+  ('maintenance_mode', 'false'),
+  ('main_domain', '')
 on conflict (key) do nothing;
 
 -- Keep the display name from Microsoft/Azure OAuth metadata when a profile is created.

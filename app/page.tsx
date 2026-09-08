@@ -27,7 +27,7 @@ type AdminLog = {
   target?: { full_name: string } | null;
 };
 type LoginMethod = 'password' | 'microsoft' | 'both';
-type AdminSettings = { allow_signup: boolean; login_domain: string; use_domain_login: boolean; login_method: LoginMethod; maintenance_mode: boolean };
+type AdminSettings = { allow_signup: boolean; login_domain: string; use_domain_login: boolean; login_method: LoginMethod; maintenance_mode: boolean; main_domain: string };
 
 const PROTECTED_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 const DEVELOPER_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
@@ -82,6 +82,7 @@ const text = {
     loginMethod: 'Metode login', loginPassword: 'Password', loginMicrosoft: 'Microsoft', loginBoth: 'Keduanya',
     all: 'Semua', fromDate: 'Dari tanggal', toDate: 'Sampai tanggal', lightMode: 'Mode terang', darkMode: 'Mode gelap',
     maintenanceMode: 'Mode maintenance', maintenanceMessage: 'Aplikasi sedang dalam maintenance. Silakan coba lagi nanti.',
+    mainDomain: 'Domain utama', mainDomainDesc: 'Domain yang akan diumumkan sebagai alamat utama aplikasi setelah tanggal pengumuman.',
     tos: 'Syarat & Ketentuan', privacy: 'Kebijakan Privasi',
   },
   en: {
@@ -119,6 +120,7 @@ const text = {
     loginMethod: 'Login method', loginPassword: 'Password', loginMicrosoft: 'Microsoft', loginBoth: 'Both',
     all: 'All', fromDate: 'From date', toDate: 'To date', lightMode: 'Light mode', darkMode: 'Dark mode',
     maintenanceMode: 'Maintenance mode', maintenanceMessage: 'The application is under maintenance. Please try again later.',
+    mainDomain: 'Main domain', mainDomainDesc: 'The domain announced as the application main address after the announcement date.',
     tos: 'Terms of Service', privacy: 'Privacy Policy',
   }
 } as const;
@@ -194,7 +196,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [authMode, setAuthMode] = useState<'in' | 'up'>('in');
-  const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com', use_domain_login: true, login_method: 'both', maintenance_mode: false });
+  const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com', use_domain_login: true, login_method: 'both', maintenance_mode: false, main_domain: '' });
   const [adminMode, setAdminMode] = useState<'user' | 'admin'>('user');
 
   // Admin modals
@@ -228,6 +230,7 @@ export default function Home() {
   }, [theme]);
 
   useEffect(() => {
+    if (!settingsLoaded) return;
     const hostname = window.location.hostname;
     const isAlternateDomain = hostname === 'weaver.leonxlab.app' || hostname === 'weaver-demo.leonxlab.app';
     if (!isAlternateDomain) return;
@@ -235,8 +238,8 @@ export default function Home() {
     const launchDate = new Date('2026-09-10T00:00:00');
     const shutdownDate = new Date('2026-10-01T00:00:00');
     if (today < launchDate) setDomainNotice('upcoming');
-    else if (today < shutdownDate) setDomainNotice('migration');
-  }, []);
+    else if (today < shutdownDate && adminSettings.main_domain) setDomainNotice('migration');
+  }, [settingsLoaded, adminSettings.main_domain]);
 
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
@@ -252,6 +255,7 @@ export default function Home() {
           use_domain_login: data.use_domain_login !== 'false', // default true
           login_method: (['password', 'microsoft', 'both'].includes(data.login_method) ? data.login_method : 'both') as LoginMethod,
           maintenance_mode: data.maintenance_mode === 'true',
+          main_domain: data.main_domain || '',
         });
       }
     } catch {} finally {
@@ -454,6 +458,7 @@ export default function Home() {
     if (settings.use_domain_login !== undefined) body.use_domain_login = settings.use_domain_login;
     if (settings.login_method !== undefined) body.login_method = settings.login_method;
     if (settings.maintenance_mode !== undefined) body.maintenance_mode = settings.maintenance_mode;
+    if (settings.main_domain !== undefined) body.main_domain = settings.main_domain;
     const res = await fetch('/api/admin/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
@@ -533,7 +538,7 @@ export default function Home() {
       />
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
       <StatusToast message={statusMessage} />
-      <DomainNotice notice={domainNotice} onClose={() => setDomainNotice(null)} />
+      <DomainNotice notice={domainNotice} mainDomain={adminSettings.main_domain} onClose={() => setDomainNotice(null)} />
     </>
   );
   const isAdmin = profile.role === 'admin';
@@ -599,7 +604,7 @@ export default function Home() {
       )}
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
       <StatusToast message={statusMessage} />
-      <DomainNotice notice={domainNotice} onClose={() => setDomainNotice(null)} />
+      <DomainNotice notice={domainNotice} mainDomain={adminSettings.main_domain} onClose={() => setDomainNotice(null)} />
       <SiteFooter t={t} />
     </main>
   );
@@ -645,32 +650,31 @@ function MaintenanceView({ t, onLogout }: { t: any; onLogout: () => void }) {
   );
 }
 
-function DomainNotice({ notice, onClose }: { notice: 'upcoming' | 'migration' | null; onClose: () => void }) {
+function DomainNotice({ notice, mainDomain, onClose }: { notice: 'upcoming' | 'migration' | null; mainDomain: string; onClose: () => void }) {
   if (!notice) return null;
   const upcoming = notice === 'upcoming';
+  const domainUrl = mainDomain ? `https://${mainDomain}/` : '';
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal domain-notice-modal">
         <div className="domain-notice-body">
           <div className="domain-notice-kicker">WEAVER</div>
-          <h2>{upcoming ? 'Weaver.app segera hadir' : 'Pindah ke Weaver.app'}</h2>
+          <h2>{upcoming ? 'Informasi domain utama segera hadir' : `Pindah ke ${mainDomain}`}</h2>
           <p>
             {upcoming
-              ? 'Anda sedang menggunakan domain alternatif. Domain utama kami akan resmi tersedia pada 10 September 2026.'
-              : 'Domain utama Weaver.app sudah aktif. Domain ini akan dinonaktifkan mulai 1 Oktober 2026.'}
+              ? 'Anda sedang menggunakan domain alternatif. Informasi domain utama akan diumumkan pada 10 September 2026.'
+              : `Domain utama ${mainDomain} sudah aktif. Domain ini akan dinonaktifkan mulai 1 Oktober 2026.`}
           </p>
-          <a className="domain-url" href="https://weaver.app/" target="_blank" rel="noopener noreferrer">
-            <span className="domain-url-prefix">https://</span>weaver.app/
-          </a>
+          {!upcoming && <a className="domain-url" href={domainUrl} target="_blank" rel="noopener noreferrer">
+            <span className="domain-url-prefix">https://</span>{mainDomain}/
+          </a>}
           <p className="domain-bookmark-hint">
-            Simpan alamat di atas sebagai bookmark agar mudah diakses kembali.
+            {upcoming ? 'Silakan tunggu informasi terbaru dari developer.' : 'Simpan alamat di atas sebagai bookmark agar mudah diakses kembali.'}
           </p>
         </div>
         <div className="modal-footer domain-notice-footer">
           <button className="btn-secondary" onClick={onClose}>Nanti saja</button>
-          <a className="btn-primary" href="https://weaver.app/" target="_blank" rel="noopener noreferrer">
-            {upcoming ? 'Buka Weaver.app' : 'Pindah sekarang'}
-          </a>
+          {!upcoming && <a className="btn-primary" href={domainUrl} target="_blank" rel="noopener noreferrer">Pindah sekarang</a>}
         </div>
       </div>
     </div>
@@ -1330,6 +1334,7 @@ function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
   const [useDomainLogin, setUseDomainLogin] = useState(adminSettings.use_domain_login);
   const [loginMethod, setLoginMethod] = useState<LoginMethod>(adminSettings.login_method);
   const [maintenanceMode, setMaintenanceMode] = useState(adminSettings.maintenance_mode);
+  const [mainDomain, setMainDomain] = useState(adminSettings.main_domain);
 
   const divider = <div style={{ borderTop: '1px solid var(--line)', margin: '4px 0' }} />;
 
@@ -1378,6 +1383,25 @@ function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
           value={maintenanceMode}
           onChange={next => { setMaintenanceMode(next); onSave({ maintenance_mode: next }); }}
         />
+
+        {divider}
+
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{t.mainDomain}</div>
+          <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>{t.mainDomainDesc}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--muted)', alignSelf: 'center', fontSize: 14 }}>https://</span>
+            <input
+              value={mainDomain}
+              onChange={e => setMainDomain(e.target.value)}
+              placeholder="weaver.app"
+              style={{ flex: 1, minWidth: 160, maxWidth: 280 }}
+            />
+            <button className="btn-primary" onClick={() => onSave({ main_domain: mainDomain })}>
+              <Check size={14} /> {t.save}
+            </button>
+          </div>
+        </div>
 
         {divider}
 

@@ -57,6 +57,10 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.maintenance_mode === 'boolean') {
     updates.push({ key: 'maintenance_mode', value: String(body.maintenance_mode) });
   }
+  if (typeof body.main_domain === 'string') {
+    const mainDomain = body.main_domain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (mainDomain) updates.push({ key: 'main_domain', value: mainDomain });
+  }
 
   for (const { key, value } of updates) {
     const { error } = await db.from('admin_settings').upsert(
