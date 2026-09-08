@@ -117,6 +117,14 @@ p { margin: 0; color: var(--muted); }
 }
 .lang-btn:hover { border-color: var(--brand-border); color: var(--brand); }
 .full-width { width: 100%; justify-content: center; min-height: 42px; }
+.microsoft-mark {
+  display: grid; grid-template-columns: repeat(2, 8px); grid-template-rows: repeat(2, 8px);
+  gap: 2px; width: 18px; height: 18px; flex-shrink: 0;
+}
+.microsoft-mark span:nth-child(1) { background: #f25022; }
+.microsoft-mark span:nth-child(2) { background: #7fba00; }
+.microsoft-mark span:nth-child(3) { background: #00a4ef; }
+.microsoft-mark span:nth-child(4) { background: #ffb900; }
 
 /* Action buttons in tables */
 .btn-action {

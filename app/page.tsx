@@ -559,7 +559,11 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSet
       </header>
       <section className="auth-card">
         <h1>{mode === 'in' ? t.login : t.createAccount}</h1>
-        <p className="auth-hint">{t.authHint}</p>
+        <p className="auth-hint">
+          {adminSettings.login_method === 'microsoft'
+            ? (lang === 'id' ? 'Masuk dengan akun anda' : 'Sign in with your account')
+            : t.authHint}
+        </p>
         {adminSettings.login_method !== 'microsoft' && <form onSubmit={onSubmit}>
           {mode === 'up' && <div className="field"><label htmlFor="auth-full-name">{t.name}</label><input id="auth-full-name" required name="full_name" /></div>}
           {mode === 'up' ? (
@@ -590,7 +594,10 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSet
         </form>}
         {adminSettings.login_method !== 'password' && (
           <button className="btn-secondary full-width" type="button" onClick={onMicrosoft}>
-            <AtSign size={15} /> {lang === 'id' ? 'Masuk dengan Microsoft' : 'Login with Microsoft'}
+            <span className="microsoft-mark" aria-hidden="true">
+              <span /><span /><span /><span />
+            </span>
+            {lang === 'id' ? 'Masuk dengan Microsoft' : 'Login with Microsoft'}
           </button>
         )}
         {/* Toggle signup hanya muncul kalau allow_signup aktif */}
