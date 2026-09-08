@@ -84,6 +84,7 @@ const text = {
     maintenanceMode: 'Mode maintenance', maintenanceMessage: 'Aplikasi sedang dalam maintenance. Silakan coba lagi nanti.',
     mainDomain: 'Domain utama', mainDomainDesc: 'Domain yang akan diumumkan sebagai alamat utama aplikasi setelah tanggal pengumuman.',
     tos: 'Syarat & Ketentuan', privacy: 'Kebijakan Privasi',
+    support: 'Dukungan',
   },
   en: {
     app: 'Weaver', login: 'Sign in', email: 'Email', password: 'Password',
@@ -122,6 +123,7 @@ const text = {
     maintenanceMode: 'Maintenance mode', maintenanceMessage: 'The application is under maintenance. Please try again later.',
     mainDomain: 'Main domain', mainDomainDesc: 'The domain announced as the application main address after the announcement date.',
     tos: 'Terms of Service', privacy: 'Privacy Policy',
+    support: 'Support',
   }
 } as const;
 
@@ -608,10 +610,10 @@ export default function Home() {
 function SiteFooter({ t }: { t?: any }) {
   return (
     <footer className="site-footer">
-      <div className="footer-copyright">© 2026 Weaver</div>
+      <div className="footer-copyright">© 2026 WEAVE.app</div>
       <div className="footer-support">
         <span className="footer-support-icon"><Mail size={13} /></span>
-        <span className="footer-support-label">Support</span>
+        <span className="footer-support-label">{t?.support || 'Support'}</span>
         <a href="mailto:support@leonxlab.digital">support@leonxlab.digital</a>
         <span className="footer-dot" aria-hidden="true">•</span>
         <a href="mailto:mailto@leonxlab.app">mailto@leonxlab.app</a>

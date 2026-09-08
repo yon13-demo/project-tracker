@@ -1,10 +1,13 @@
 'use client';
+import { useState } from 'react';
 import Image from 'next/image';
-import { ArrowLeft, ScrollText } from 'lucide-react';
+import { ArrowLeft, ScrollText, Shield, Globe2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function TermsOfService() {
   const router = useRouter();
+  const [lang, setLang] = useState<'id' | 'en'>('id');
+  const en = lang === 'en';
   const lastUpdated = '1 September 2026';
 
   return (
@@ -12,26 +15,26 @@ export default function TermsOfService() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">
-            <Image src="/logo/weaver.svg" alt="Weaver" width={48} height={48} style={{ objectFit: 'contain' }} />
+            <Image src="/logo/weaver-icon.svg" alt="WEAVE.app" width={42} height={42} style={{ objectFit: 'contain' }} />
           </span>
-          Weaver
+          <span className="brand-lockup"><span className="brand-name">WEAVE<span className="brand-app">.app</span></span><span className="brand-tagline">work, woven together.</span></span>
         </div>
-        <button className="btn-secondary" onClick={() => router.back()}>
-          <ArrowLeft size={14} /> Kembali
-        </button>
+        <div className="top-actions">
+          <button className="lang-btn" onClick={() => setLang(en ? 'id' : 'en')}><Globe2 size={14} /> {en ? 'ID' : 'EN'}</button>
+          <button className="btn-secondary" onClick={() => router.back()}><ArrowLeft size={14} /> {en ? 'Back' : 'Kembali'}</button>
+        </div>
       </header>
 
       <div className="legal-page">
         <div className="legal-hero">
           <span className="legal-icon"><ScrollText size={28} /></span>
-          <h1>Syarat &amp; Ketentuan Penggunaan</h1>
-          <p className="legal-meta">Terakhir diperbarui: {lastUpdated}</p>
+          <h1>{en ? 'Terms of Service' : 'Syarat & Ketentuan Penggunaan'}</h1>
+          <p className="legal-meta">{en ? 'Last updated' : 'Terakhir diperbarui'}: {lastUpdated}</p>
         </div>
 
-        <div className="legal-body">
+        {en ? <TermsEnglish /> : <div className="legal-body">
           <p>
-            Dengan mengakses atau menggunakan aplikasi <strong>Weaver</strong> ("Layanan"), Anda menyetujui syarat dan ketentuan berikut.
-            Harap baca dengan seksama sebelum menggunakan Layanan.
+            {en ? <>By accessing or using <strong>WEAVE.app</strong> (the “Service”), you agree to these terms and conditions. Please read them carefully before using the Service.</> : <>Dengan mengakses atau menggunakan aplikasi <strong>WEAVE.app</strong> ("Layanan"), Anda menyetujui syarat dan ketentuan berikut. Harap baca dengan seksama sebelum menggunakan Layanan.</>}
           </p>
 
           <section className="legal-section">
@@ -130,12 +133,31 @@ export default function TermsOfService() {
               <a href="mailto:mailto@leonxlab.app">mailto@leonxlab.app</a>
             </div>
           </section>
-        </div>
+        </div>}
       </div>
 
       <footer className="site-footer" style={{ marginTop: 40 }}>
-        <div className="footer-copyright">© 2026 Weaver</div>
+        <div className="footer-copyright">© 2026 WEAVE.app</div>
+        <div className="footer-legal"><a href="/tos"><ScrollText size={11} /> {en ? 'Terms of Service' : 'Syarat & Ketentuan'}</a><span className="footer-dot">•</span><a href="/privacy"><Shield size={11} /> {en ? 'Privacy Policy' : 'Kebijakan Privasi'}</a></div>
       </footer>
     </main>
+  );
+}
+
+function TermsEnglish() {
+  return (
+    <div className="legal-body">
+      <p>By accessing or using <strong>WEAVE.app</strong> (the “Service”), you agree to these terms and conditions.</p>
+      <section className="legal-section"><h2>1. Use of the Service</h2><p>WEAVE.app provides work-hour tracking and project management for users authorized by an organization administrator. Use the Service lawfully, keep your credentials private, submit accurate work data, and do not access other users’ data without authorization.</p></section>
+      <section className="legal-section"><h2>2. Accounts and Responsibilities</h2><p>You are responsible for the security and confidentiality of your account. Report suspected unauthorized access to your organization administrator promptly.</p></section>
+      <section className="legal-section"><h2>3. Data and Content</h2><p>Data entered into the Service remains owned by your organization. Organization administrators may access, export, or delete data for operational purposes.</p></section>
+      <section className="legal-section"><h2>4. Restrictions</h2><p>You may not reverse engineer, modify, misuse, unlawfully use, disrupt, or attempt to compromise the availability or security of the Service.</p></section>
+      <section className="legal-section"><h2>5. Service Availability</h2><p>We work to provide a reliable service but do not guarantee uninterrupted availability. Maintenance, updates, or technical issues may affect access.</p></section>
+      <section className="legal-section"><h2>6. Termination</h2><p>Organization administrators may suspend or delete your account if these terms are violated or when required for organizational operations.</p></section>
+      <section className="legal-section"><h2>7. Limitation of Liability</h2><p>To the extent permitted by law, WEAVE.app is not liable for indirect, incidental, or consequential losses arising from use of or inability to use the Service.</p></section>
+      <section className="legal-section"><h2>8. Changes to These Terms</h2><p>We may update these terms from time to time. Continued use after changes means that you accept the updated terms.</p></section>
+      <section className="legal-section"><h2>9. Governing Law</h2><p>These terms are governed by the laws of the Republic of Indonesia. Disputes will first be addressed through good-faith discussion and, when necessary, the competent courts in Indonesia.</p></section>
+      <section className="legal-section"><h2>10. Contact</h2><p>Questions about these Terms can be sent to:</p><div className="legal-contact"><a href="mailto:support@leonxlab.digital">support@leonxlab.digital</a><span className="legal-contact-sep">·</span><a href="mailto:mailto@leonxlab.app">mailto@leonxlab.app</a></div></section>
+    </div>
   );
 }
