@@ -40,8 +40,8 @@ export default function LoginDev() {
       {/* Topbar */}
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: '1px solid #1e1e1e' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#e5e5e5', fontWeight: 700, fontSize: 18 }}>
-          <Image src="/logo/weaver.svg" alt="Weaver" width={36} height={36} style={{ objectFit: 'contain' }} />
-          Weaver <span style={{ color: '#6366f1', fontSize: 12, fontWeight: 600, background: '#1e1b4b', padding: '2px 8px', borderRadius: 20 }}>DEV</span>
+          <Image src="/logo/weaver.svg" alt="Weave" width={36} height={36} style={{ objectFit: 'contain' }} />
+          Weave <span style={{ color: '#6366f1', fontSize: 12, fontWeight: 600, background: '#1e1b4b', padding: '2px 8px', borderRadius: 20 }}>DEV</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#6366f1', fontSize: 13 }}>
           <Terminal size={14} /> Developer Portal

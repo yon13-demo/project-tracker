@@ -48,7 +48,7 @@ function showStatus(message: string) {
 // ─── i18n ─────────────────────────────────────────────────────────────────────
 const text = {
   id: {
-    app: 'Weaver', login: 'Masuk', email: 'Email', password: 'Kata sandi',
+    app: 'Weave', login: 'Masuk', email: 'Email', password: 'Kata sandi',
     signIn: 'Masuk', signUp: 'Buat akun', logout: 'Keluar',
     projects: 'Proyek Saya', admin: 'Admin', welcome: 'Selamat datang',
     cancel: 'Batal', save: 'Simpan', overview: 'Ringkasan',
@@ -87,7 +87,7 @@ const text = {
     support: 'Dukungan',
   },
   en: {
-    app: 'Weaver', login: 'Sign in', email: 'Email', password: 'Password',
+    app: 'Weave', login: 'Sign in', email: 'Email', password: 'Password',
     signIn: 'Sign in', signUp: 'Create account', logout: 'Sign out',
     projects: 'My Projects', admin: 'Admin', welcome: 'Welcome',
     cancel: 'Cancel', save: 'Save', overview: 'Overview',
@@ -222,19 +222,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem('weaver-theme');
+    const savedTheme = window.localStorage.getItem('weave-theme');
     if (savedTheme === 'dark' || savedTheme === 'light') setTheme(savedTheme);
   }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem('weaver-theme', theme);
+    window.localStorage.setItem('weave-theme', theme);
   }, [theme]);
 
   useEffect(() => {
     if (!settingsLoaded) return;
     const hostname = window.location.hostname;
-    const isAlternateDomain = hostname !== 'weaver.site' && hostname !== 'localhost' && hostname !== '127.0.0.1';
+    const isAlternateDomain = hostname !== 'weave.site' && hostname !== 'localhost' && hostname !== '127.0.0.1';
     if (!isAlternateDomain) return;
     const today = new Date();
     const launchDate = new Date('2026-09-10T00:00:00');
@@ -610,7 +610,7 @@ export default function Home() {
 function SiteFooter({ t }: { t?: any }) {
   return (
     <footer className="site-footer">
-      <div className="footer-copyright">© 2026 Weaver</div>
+      <div className="footer-copyright">© 2026 Weave</div>
       <div className="footer-support">
         <span className="footer-support-icon"><Mail size={13} /></span>
         <span className="footer-support-label">{t?.support || 'Support'}</span>
@@ -650,10 +650,10 @@ function Brand() {
   return (
     <div className="brand">
       <span className="brand-mark">
-        <Image src="/logo/weaver-icon.svg" alt="Weaver" width={64} height={64} style={{ objectFit: 'contain' }} />
+        <Image src="/logo/weaver-icon.svg" alt="Weave" width={64} height={64} style={{ objectFit: 'contain' }} />
       </span>
       <span className="brand-lockup">
-        <span className="brand-name">Weaver</span>
+        <span className="brand-name">Weave</span>
         <span className="brand-tagline">work, woven together.</span>
       </span>
     </div>
@@ -668,7 +668,7 @@ function DomainNotice({ notice, mainDomain, onClose }: { notice: 'upcoming' | 'm
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal domain-notice-modal">
         <div className="domain-notice-body">
-          <div className="domain-notice-kicker">WEAVER</div>
+          <div className="domain-notice-kicker">WEAVE</div>
           <h2>{upcoming ? 'Informasi domain utama segera hadir' : `Pindah ke ${mainDomain}`}</h2>
           <p>
             {upcoming
@@ -1399,7 +1399,7 @@ function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
             <input
               value={mainDomain}
               onChange={e => setMainDomain(e.target.value)}
-              placeholder="weaver.site"
+              placeholder="weave.site"
               style={{ flex: 1, minWidth: 160, maxWidth: 280 }}
             />
             <button className="btn-primary" onClick={() => onSave({ main_domain: mainDomain })}>

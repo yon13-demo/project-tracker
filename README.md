@@ -1,4 +1,4 @@
-# Weaver
+# Weave
 
 Aplikasi ringan Next.js untuk Vercel dengan dua peran: **admin** dan **user**, serta bahasa Indonesia dan English.
 

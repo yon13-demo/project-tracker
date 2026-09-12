@@ -18,11 +18,11 @@ insert into public.admin_settings (key, value) values
   ('use_domain_login', 'true'),
   ('login_method', 'both'),
   ('maintenance_mode', 'false'),
-  ('main_domain', 'weaver.site')
+  ('main_domain', 'weave.site')
 on conflict (key) do nothing;
 
 update public.admin_settings
-set value = 'weaver.site', updated_at = now()
+set value = 'weave.site', updated_at = now()
 where key = 'main_domain';
 
 -- Keep the display name from Microsoft/Azure OAuth metadata when a profile is created.
