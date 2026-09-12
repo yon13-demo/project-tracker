@@ -234,7 +234,7 @@ export default function Home() {
   useEffect(() => {
     if (!settingsLoaded) return;
     const hostname = window.location.hostname;
-    const isAlternateDomain = hostname !== 'weave.site' && hostname !== 'localhost' && hostname !== '127.0.0.1';
+    const isAlternateDomain = hostname !== 'weave.web.id' && hostname !== 'localhost' && hostname !== '127.0.0.1';
     if (!isAlternateDomain) return;
     const today = new Date();
     const launchDate = new Date('2026-09-10T00:00:00');
@@ -1399,7 +1399,7 @@ function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
             <input
               value={mainDomain}
               onChange={e => setMainDomain(e.target.value)}
-              placeholder="weave.site"
+              placeholder="weave.web.id"
               style={{ flex: 1, minWidth: 160, maxWidth: 280 }}
             />
             <button className="btn-primary" onClick={() => onSave({ main_domain: mainDomain })}>

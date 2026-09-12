@@ -2,7 +2,7 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://weave.site'),
+  metadataBase: new URL('https://weave.web.id'),
   title: 'Weave',
   description: 'Weave - work and project tracking.',
   icons: { icon: '/favicon.ico' },
