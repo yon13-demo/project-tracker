@@ -15,9 +15,9 @@ export default function TermsOfService() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">
-            <Image src="/logo/weaver-icon.svg" alt="WEAVE" width={64} height={64} style={{ objectFit: 'contain' }} />
+            <Image src="/logo/weaver-icon.svg" alt="Weaver" width={64} height={64} style={{ objectFit: 'contain' }} />
           </span>
-          <span className="brand-lockup"><span className="brand-name">WEAVE</span><span className="brand-tagline">work, woven together.</span></span>
+          <span className="brand-lockup"><span className="brand-name">Weaver</span><span className="brand-tagline">work and project tracking.</span></span>
         </div>
         <div className="top-actions">
           <button className="lang-btn" onClick={() => setLang(en ? 'id' : 'en')}><Globe2 size={14} /> {en ? 'ID' : 'EN'}</button>
@@ -34,7 +34,7 @@ export default function TermsOfService() {
 
         {en ? <TermsEnglish /> : <div className="legal-body">
           <p>
-            {en ? <>By accessing or using <strong>WEAVE</strong> (the “Service”), you agree to these terms and conditions. Please read them carefully before using the Service.</> : <>Dengan mengakses atau menggunakan aplikasi <strong>WEAVE</strong> ("Layanan"), Anda menyetujui syarat dan ketentuan berikut. Harap baca dengan seksama sebelum menggunakan Layanan.</>}
+            {en ? <>By accessing or using <strong>Weaver</strong> (the “Service”), you agree to these terms and conditions. Please read them carefully before using the Service.</> : <>Dengan mengakses atau menggunakan aplikasi <strong>Weaver</strong> ("Layanan"), Anda menyetujui syarat dan ketentuan berikut. Harap baca dengan seksama sebelum menggunakan Layanan.</>}
           </p>
 
           <section className="legal-section">
@@ -137,7 +137,7 @@ export default function TermsOfService() {
       </div>
 
       <footer className="site-footer" style={{ marginTop: 40 }}>
-        <div className="footer-copyright">© 2026 WEAVE</div>
+        <div className="footer-copyright">© 2026 Weaver</div>
         <div className="footer-legal"><a href="/tos"><ScrollText size={11} /> {en ? 'Terms of Service' : 'Syarat & Ketentuan'}</a><span className="footer-dot">•</span><a href="/privacy"><Shield size={11} /> {en ? 'Privacy Policy' : 'Kebijakan Privasi'}</a></div>
       </footer>
     </main>
@@ -147,14 +147,14 @@ export default function TermsOfService() {
 function TermsEnglish() {
   return (
     <div className="legal-body">
-      <p>By accessing or using <strong>WEAVE</strong> (the “Service”), you agree to these terms and conditions.</p>
-      <section className="legal-section"><h2>1. Use of the Service</h2><p>WEAVE provides work-hour tracking and project management for users authorized by an organization administrator. Use the Service lawfully, keep your credentials private, submit accurate work data, and do not access other users’ data without authorization.</p></section>
+      <p>By accessing or using <strong>Weaver</strong> (the “Service”), you agree to these terms and conditions.</p>
+      <section className="legal-section"><h2>1. Use of the Service</h2><p>Weaver provides work-hour tracking and project management for users authorized by an organization administrator. Use the Service lawfully, keep your credentials private, submit accurate work data, and do not access other users’ data without authorization.</p></section>
       <section className="legal-section"><h2>2. Accounts and Responsibilities</h2><p>You are responsible for the security and confidentiality of your account. Report suspected unauthorized access to your organization administrator promptly.</p></section>
       <section className="legal-section"><h2>3. Data and Content</h2><p>Data entered into the Service remains owned by your organization. Organization administrators may access, export, or delete data for operational purposes.</p></section>
       <section className="legal-section"><h2>4. Restrictions</h2><p>You may not reverse engineer, modify, misuse, unlawfully use, disrupt, or attempt to compromise the availability or security of the Service.</p></section>
       <section className="legal-section"><h2>5. Service Availability</h2><p>We work to provide a reliable service but do not guarantee uninterrupted availability. Maintenance, updates, or technical issues may affect access.</p></section>
       <section className="legal-section"><h2>6. Termination</h2><p>Organization administrators may suspend or delete your account if these terms are violated or when required for organizational operations.</p></section>
-      <section className="legal-section"><h2>7. Limitation of Liability</h2><p>To the extent permitted by law, WEAVE is not liable for indirect, incidental, or consequential losses arising from use of or inability to use the Service.</p></section>
+      <section className="legal-section"><h2>7. Limitation of Liability</h2><p>To the extent permitted by law, Weaver is not liable for indirect, incidental, or consequential losses arising from use of or inability to use the Service.</p></section>
       <section className="legal-section"><h2>8. Changes to These Terms</h2><p>We may update these terms from time to time. Continued use after changes means that you accept the updated terms.</p></section>
       <section className="legal-section"><h2>9. Governing Law</h2><p>These terms are governed by the laws of the Republic of Indonesia. Disputes will first be addressed through good-faith discussion and, when necessary, the competent courts in Indonesia.</p></section>
       <section className="legal-section"><h2>10. Contact</h2><p>Questions about these Terms can be sent to:</p><div className="legal-contact"><a href="mailto:support@leonxlab.digital">support@leonxlab.digital</a><span className="legal-contact-sep">·</span><a href="mailto:mailto@leonxlab.app">mailto@leonxlab.app</a></div></section>

@@ -2,8 +2,9 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
-  title: 'WEAVE',
-  description: 'Work, woven together.',
+  metadataBase: new URL('https://weaver.site'),
+  title: 'Weaver',
+  description: 'Weaver - work and project tracking.',
   icons: { icon: '/favicon.ico' },
 };
 

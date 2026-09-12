@@ -234,7 +234,7 @@ export default function Home() {
   useEffect(() => {
     if (!settingsLoaded) return;
     const hostname = window.location.hostname;
-    const isAlternateDomain = hostname === 'weaver.leonxlab.app' || hostname === 'weaver-demo.leonxlab.app';
+    const isAlternateDomain = hostname !== 'weaver.site' && hostname !== 'localhost' && hostname !== '127.0.0.1';
     if (!isAlternateDomain) return;
     const today = new Date();
     const launchDate = new Date('2026-09-10T00:00:00');
@@ -610,7 +610,7 @@ export default function Home() {
 function SiteFooter({ t }: { t?: any }) {
   return (
     <footer className="site-footer">
-      <div className="footer-copyright">© 2026 WEAVE</div>
+      <div className="footer-copyright">© 2026 Weaver</div>
       <div className="footer-support">
         <span className="footer-support-icon"><Mail size={13} /></span>
         <span className="footer-support-label">{t?.support || 'Support'}</span>
@@ -650,10 +650,10 @@ function Brand() {
   return (
     <div className="brand">
       <span className="brand-mark">
-        <Image src="/logo/weaver-icon.svg" alt="WEAVE" width={64} height={64} style={{ objectFit: 'contain' }} />
+        <Image src="/logo/weaver-icon.svg" alt="Weaver" width={64} height={64} style={{ objectFit: 'contain' }} />
       </span>
       <span className="brand-lockup">
-        <span className="brand-name">WEAVE</span>
+        <span className="brand-name">Weaver</span>
         <span className="brand-tagline">work, woven together.</span>
       </span>
     </div>
@@ -1399,7 +1399,7 @@ function AdminSettingsPanel({ t, lang, adminSettings, onSave }: any) {
             <input
               value={mainDomain}
               onChange={e => setMainDomain(e.target.value)}
-              placeholder="weaver.app"
+              placeholder="weaver.site"
               style={{ flex: 1, minWidth: 160, maxWidth: 280 }}
             />
             <button className="btn-primary" onClick={() => onSave({ main_domain: mainDomain })}>
