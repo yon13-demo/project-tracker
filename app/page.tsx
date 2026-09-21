@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Image from 'next/image';
 import {
-  Globe2, LogOut, Pencil, Plus, Trash2, UserPlus, Users,
+  Globe2, KeyRound, LogOut, Pencil, Plus, Trash2, UserPlus, Users,
   Download, FolderPlus, AlertCircle, ChevronDown, Check,
   ToggleLeft, ToggleRight, Clock, Info, X, Shield, ScrollText,
   Settings, UserCog, AtSign, Mail, Sun, Moon
@@ -85,6 +85,10 @@ const text = {
     mainDomain: 'Domain utama', mainDomainDesc: 'Domain yang akan diumumkan sebagai alamat utama aplikasi setelah tanggal pengumuman.',
     tos: 'Syarat & Ketentuan', privacy: 'Kebijakan Privasi',
     support: 'Dukungan',
+    changePassword: 'Ganti Password', currentPassword: 'Password Saat Ini', newPassword: 'Password Baru',
+    confirmPassword: 'Konfirmasi Password', passwordMismatch: 'Password baru tidak cocok.',
+    passwordTooShort: 'Password minimal 6 karakter.', passwordChanged: 'Password berhasil diubah.',
+    switchToEmployee: 'Karyawan', switchToAdmin: 'Admin',
   },
   en: {
     app: 'Weave', login: 'Sign in', email: 'Email', password: 'Password',
@@ -123,6 +127,10 @@ const text = {
     maintenanceMode: 'Maintenance mode', maintenanceMessage: 'The application is under maintenance. Please try again later.',
     mainDomain: 'Main domain', mainDomainDesc: 'The domain announced as the application main address after the announcement date.',
     tos: 'Terms of Service', privacy: 'Privacy Policy',
+    changePassword: 'Change Password', currentPassword: 'Current Password', newPassword: 'New Password',
+    confirmPassword: 'Confirm Password', passwordMismatch: 'New passwords do not match.',
+    passwordTooShort: 'Password must be at least 6 characters.', passwordChanged: 'Password changed successfully.',
+    switchToEmployee: 'Employee', switchToAdmin: 'Admin',
     support: 'Support',
   }
 } as const;
@@ -408,13 +416,27 @@ export default function Home() {
     e.preventDefault();
     showStatus(lang === 'id' ? 'Menyimpan akun…' : 'Saving account…');
     const f = new FormData(e.currentTarget);
+    // UserModal injects __finalEmail for the username+domain shortcut case
+    const emailFromModal = (e.currentTarget as any).__finalEmail as string | undefined;
+    const emailFromForm = f.get('email') as string | null;
+    const email = emailFromModal || emailFromForm || '';
+
+    const fullName = (f.get('full_name') as string || '').trim();
+    const password = (f.get('password') as string || '').trim() || undefined;
+
+    if (userOpen === 'new') {
+      if (!fullName) { showAlert(lang === 'id' ? 'Nama wajib diisi.' : 'Name is required.'); return; }
+      if (!email) { showAlert(lang === 'id' ? 'Email wajib diisi.' : 'Email is required.'); return; }
+      if (!password) { showAlert(lang === 'id' ? 'Password wajib diisi.' : 'Password is required.'); return; }
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     const response = await fetch('/api/admin/users', {
       method: userOpen === 'new' ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
       body: JSON.stringify({
         id: userOpen === 'new' ? undefined : (userOpen as Profile)?.id,
-        full_name: f.get('full_name'), email: f.get('email'), password: f.get('password') || undefined
+        full_name: fullName, email, password
       })
     });
     const body = await response.json();
@@ -561,7 +583,7 @@ export default function Home() {
           </button>
           {isAdmin && (
             <button className="btn-secondary" onClick={() => setAdminMode(mode => mode === 'user' ? 'admin' : 'user')}>
-              <UserCog size={15} /> {adminMode === 'user' ? t.admin : t.user}
+              <UserCog size={15} /> {adminMode === 'user' ? t.switchToAdmin : t.switchToEmployee}
             </button>
           )}
           <button className="icon-button" onClick={() => supabase.auth.signOut()}>
@@ -790,6 +812,20 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
   const [saving, setSaving] = useState(false);
   const [dateEntries, setDateEntries] = useState<Array<{ tempId: string; project_id: string; hours: string }>>([]);
   const [isLeaveMode, setIsLeaveMode] = useState(false);
+  const [changePassOpen, setChangePassOpen] = useState(false);
+
+  async function handleChangePassword(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const newPass = (f.get('new_password') as string || '').trim();
+    const confirmPass = (f.get('confirm_password') as string || '').trim();
+    if (newPass.length < 6) { showAlert(t.passwordTooShort); return; }
+    if (newPass !== confirmPass) { showAlert(t.passwordMismatch); return; }
+    showStatus(lang === 'id' ? 'Menyimpan password…' : 'Saving password…');
+    const { error } = await supabase.auth.updateUser({ password: newPass });
+    if (error) showAlert(error.message);
+    else { setChangePassOpen(false); showStatus(t.passwordChanged); }
+  }
 
   async function handleDeleteDate(date: string) {
     if (!confirm(`${t.delete} ${formatDateDisplay(date, lang).replace('\n', ' ')}?`)) return;
@@ -863,7 +899,38 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
     <div className="user-view">
       <div className="user-header">
         <h1>{t.welcome}, <span className="user-name">{profile.full_name}</span></h1>
+        <button className="btn-secondary" style={{ marginTop: 8 }} onClick={() => setChangePassOpen(true)}>
+          <KeyRound size={14} /> {t.changePassword}
+        </button>
       </div>
+
+      {changePassOpen && (
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setChangePassOpen(false)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2>{t.changePassword}</h2>
+              <button className="btn-ghost-icon" onClick={() => setChangePassOpen(false)}><X size={18} /></button>
+            </div>
+            <form onSubmit={handleChangePassword}>
+              <div className="field">
+                <label>{t.newPassword}</label>
+                <input name="new_password" type="password" minLength={6} required placeholder="Min. 6 karakter" />
+              </div>
+              <div className="field">
+                <label>{t.confirmPassword}</label>
+                <input name="confirm_password" type="password" minLength={6} required />
+              </div>
+              <div className="modal-footer">
+                <div />
+                <div className="modal-footer-right">
+                  <button type="button" className="btn-secondary" onClick={() => setChangePassOpen(false)}>{t.cancel}</button>
+                  <button type="submit" className="btn-primary"><KeyRound size={15} />{t.changePassword}</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="days-table-wrap">
         <table className="days-table">
@@ -1621,16 +1688,20 @@ function UserModal({ t, lang, user, onClose, onSubmit, loginDomain }: any) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    // inject final email
-    const syntheticData = new FormData();
-    syntheticData.append('full_name', String(f.get('full_name') || ''));
-    if (!user) syntheticData.append('email', finalEmail);
-    syntheticData.append('password', String(f.get('password') || ''));
-    // Build a synthetic event with our form data
-    const fakeEvent = { preventDefault: () => {}, currentTarget: { elements: {}, ...Object.fromEntries(syntheticData) } };
-    // Pass directly to parent onSubmit by calling with form data override
-    onSubmit(e, finalEmail);
+    // Validate email for new user
+    if (!user && !finalEmail) {
+      alert(lang === 'id' ? 'Email wajib diisi.' : 'Email is required.');
+      return;
+    }
+    // Inject finalEmail into a hidden input so FormData picks it up
+    // We call parent's adminUser but pass a patched event
+    const form = e.currentTarget;
+    // Temporarily set the hidden email field value if using username shortcut
+    const hiddenEmailInput = form.querySelector('input[type="hidden"][name="email"]') as HTMLInputElement | null;
+    if (hiddenEmailInput) hiddenEmailInput.value = finalEmail;
+    // Patch: inject finalEmail directly as a custom attribute on the form for parent to read
+    (form as any).__finalEmail = finalEmail;
+    onSubmit(e);
   }
 
   return (
@@ -1640,7 +1711,7 @@ function UserModal({ t, lang, user, onClose, onSubmit, loginDomain }: any) {
           <h2>{user ? t.edit : t.addUser}</h2>
           <button className="btn-ghost-icon" onClick={onClose}><X size={18} /></button>
         </div>
-        <form onSubmit={onSubmit}>
+        <form onSubmit={handleSubmit}>
           <div className="field"><label>{t.name}</label><input name="full_name" required defaultValue={user?.full_name} /></div>
           {!user && (
             <div className="field">
