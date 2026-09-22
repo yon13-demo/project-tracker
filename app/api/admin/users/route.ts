@@ -16,7 +16,7 @@ async function verifyAdmin(request: NextRequest) {
   const db = adminClient();
   const { data: { user } } = await db.auth.getUser(token);
   if (!user) return null;
-  const { data: profile } = await db.from('profiles').select('id,role,dev_access').eq('id', user.id).single();
+  const { data: profile } = await db.from('profiles').select('id,role,dev_access,dev_role').eq('id', user.id).single();
   const email = user.email?.toLowerCase() || '';
   const isDevOps = DEVOPS_DOMAINS.some(domain => email.endsWith(`@${domain}`));
   return profile && (profile.role === 'admin' || profile.dev_access || isDevOps) ? { user, profile } : null;

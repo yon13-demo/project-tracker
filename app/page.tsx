@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Lang = 'id' | 'en';
-type Profile = { id: string; full_name: string; role: 'admin' | 'user'; email?: string; dev_access?: boolean };
+type Profile = { id: string; full_name: string; role: 'admin' | 'user'; email?: string; dev_access?: boolean; dev_role?: string | null };
 type Project = { id: string; project_code: string; name: string; company?: string; description: string; is_active: boolean; inactive_from: string | null };
 type WorkLog = {
   id: string; user_id: string; log_date: string;
@@ -28,6 +28,7 @@ type AdminLog = {
 };
 type LoginMethod = 'password' | 'microsoft' | 'both';
 type AdminSettings = { allow_signup: boolean; login_domain: string; use_domain_login: boolean; login_method: LoginMethod; maintenance_mode: boolean; main_domain: string };
+type AppPopup = { id: string; title: string; body: string; custom_label: string | null; custom_url: string | null; close_label: string | null };
 
 const PROTECTED_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 const DEVELOPER_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
@@ -222,6 +223,8 @@ export default function Home() {
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [domainNotice, setDomainNotice] = useState<'upcoming' | 'migration' | null>(null);
+  const [activePopups, setActivePopups] = useState<AppPopup[]>([]);
+  const [dismissedPopups, setDismissedPopups] = useState<string[]>([]);
 
   useEffect(() => {
     alertSetter = setAlertMessage;
@@ -238,6 +241,10 @@ export default function Home() {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem('weave-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    fetch('/api/popups').then(response => response.ok ? response.json() : []).then(data => setActivePopups(data || [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!settingsLoaded) return;
@@ -276,7 +283,7 @@ export default function Home() {
     if (!configured) return setLoading(false);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setProfile(null); setLoading(false); return; }
-    const { data: own } = await supabase.from('profiles').select('id,full_name,role,dev_access').eq('id', user.id).single();
+    const { data: own } = await supabase.from('profiles').select('id,full_name,role,dev_access,dev_role').eq('id', user.id).single();
     if (!own) return setLoading(false);
     const metadata = user.user_metadata || {};
     const identityData = user.identities?.[0]?.identity_data || {};
@@ -298,7 +305,7 @@ export default function Home() {
     const [{ data: allProjects }, { data: logs }, { data: allUsers }] = await Promise.all([
       supabase.from('projects').select('id,project_code,name,company,description,is_active,inactive_from').order('created_at', { ascending: false }),
       supabase.from('work_logs').select('id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)').order('log_date', { ascending: false }),
-      effectiveRole === 'admin' ? supabase.from('profiles').select('id,full_name,role,dev_access').order('full_name') : Promise.resolve({ data: [] })
+      effectiveRole === 'admin' ? supabase.from('profiles').select('id,full_name,role,dev_access,dev_role').order('full_name') : Promise.resolve({ data: [] })
     ]);
 
     // For admin, enrich users with emails
@@ -563,6 +570,7 @@ export default function Home() {
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
       <StatusToast message={statusMessage} />
       <DomainNotice notice={domainNotice} mainDomain={adminSettings.main_domain} onClose={() => setDomainNotice(null)} />
+      <AnnouncementPopup popup={activePopups.find(popup => !dismissedPopups.includes(popup.id))} onClose={popup => setDismissedPopups(current => [...current, popup.id])} />
     </>
   );
   const isAdmin = profile.role === 'admin' && (isDeveloperEmail(profile.email) || !profile.dev_access);
@@ -625,8 +633,25 @@ export default function Home() {
       <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />
       <StatusToast message={statusMessage} />
       <DomainNotice notice={domainNotice} mainDomain={adminSettings.main_domain} onClose={() => setDomainNotice(null)} />
+      <AnnouncementPopup popup={activePopups.find(popup => !dismissedPopups.includes(popup.id))} onClose={popup => setDismissedPopups(current => [...current, popup.id])} />
       <SiteFooter t={t} />
     </main>
+  );
+}
+
+function AnnouncementPopup({ popup, onClose }: { popup?: AppPopup; onClose: (popup: AppPopup) => void }) {
+  if (!popup) return null;
+  return (
+    <div className="popup-backdrop" role="presentation">
+      <section className="announcement-popup" role="dialog" aria-modal="true" aria-labelledby="announcement-title">
+        <h2 id="announcement-title">{popup.title}</h2>
+        <p className="announcement-body">{popup.body}</p>
+        <div className="announcement-actions">
+          {popup.custom_label && popup.custom_url && <a className="btn-primary" href={popup.custom_url} target="_blank" rel="noreferrer">{popup.custom_label}</a>}
+          <button className="btn-secondary" onClick={() => onClose(popup)}>{popup.close_label || 'OK'}</button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1153,6 +1178,10 @@ function AdminView({
     }).filter((x: any) => x.hours < 25);
   }, [users, workLogs, last7Days]);
 
+  const visibleEmployeeUsers = users.filter((u: Profile) => !(u.email && isProtectedDomain(u.email)) && (!isDeveloperEmail(u.email) || Boolean(u.dev_access)));
+  const adminEmployeeUsers = visibleEmployeeUsers.filter((u: Profile) => u.role === 'admin' || u.dev_access);
+  const regularEmployeeUsers = visibleEmployeeUsers.filter((u: Profile) => u.role === 'user' && !u.dev_access);
+
   return (
     <div className="admin-view">
       {/* Stats */}
@@ -1320,52 +1349,13 @@ function AdminView({
           <h2>{t.userList}</h2>
           <button className="btn-primary" onClick={onAddUser}><UserPlus size={15} />{t.addUser}</button>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t.name}</th>
-                <th>Email</th>
-                <th>{t.role}</th>
-                <th>{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.filter((u: Profile) => !u.dev_access && !isDeveloperEmail(u.email) && !(u.email && isProtectedDomain(u.email))).map((u: Profile) => {
-                const isSelf = u.id === currentProfile?.id;
-                return (
-                  <tr key={u.id}>
-                    <td>{u.full_name}</td>
-                    <td style={{ color: 'var(--muted)', fontSize: 12 }}>
-                      {u.email || '—'}
-                    </td>
-                    <td>
-                      {isSelf ? (
-                        <span className={`role-badge ${u.role}`}>{u.role}</span>
-                      ) : (
-                        <select
-                          className="role-select"
-                          value={u.role}
-                          onChange={e => onUpdateRole(u, e.target.value)}
-                        >
-                          <option value="user">user</option>
-                          <option value="admin">admin</option>
-                        </select>
-                      )}
-                    </td>
-                    <td>
-                      <div className="action-btns">
-                        <button className="btn-action" onClick={() => onEditUser(u)}><Pencil size={13} /> {t.edit}</button>
-                        {!isSelf && (
-                          <button className="btn-action danger" onClick={() => onDeleteUser(u)}><Trash2 size={13} /> {t.delete}</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="employee-role-group">
+          <h3>Admin <span>{adminEmployeeUsers.length}</span></h3>
+          <EmployeeTable t={t} users={adminEmployeeUsers} currentProfile={currentProfile} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUpdateRole={onUpdateRole} />
+        </div>
+        <div className="employee-role-group">
+          <h3>User <span>{regularEmployeeUsers.length}</span></h3>
+          <EmployeeTable t={t} users={regularEmployeeUsers} currentProfile={currentProfile} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUpdateRole={onUpdateRole} />
         </div>
       </div>
 
@@ -1391,6 +1381,37 @@ function AdminView({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+function EmployeeTable({ t, users, currentProfile, onEditUser, onDeleteUser, onUpdateRole }: any) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead><tr><th>{t.name}</th><th>Email</th><th>{t.role}</th><th>{t.actions}</th></tr></thead>
+        <tbody>
+          {users.map((user: Profile) => {
+            const isSelf = user.id === currentProfile?.id;
+            const isITOps = Boolean(user.dev_access) && !isDeveloperEmail(user.email);
+            return (
+              <tr key={user.id}>
+                <td>{user.full_name}</td>
+                <td style={{ color: 'var(--muted)', fontSize: 12 }}>{user.email || '—'}</td>
+                <td>
+                  {isITOps ? <span className="role-badge admin">Admin (IT-Ops)</span> : isSelf ? <span className={`role-badge ${user.role}`}>{user.role}</span> : (
+                    <select className="role-select" value={user.role} onChange={event => onUpdateRole(user, event.target.value)}>
+                      <option value="user">user</option><option value="admin">admin</option>
+                    </select>
+                  )}
+                </td>
+                <td><div className="action-btns"><button className="btn-action" onClick={() => onEditUser(user)}><Pencil size={13} /> {t.edit}</button>{!isSelf && <button className="btn-action danger" onClick={() => onDeleteUser(user)}><Trash2 size={13} /> {t.delete}</button>}</div></td>
+              </tr>
+            );
+          })}
+          {!users.length && <tr><td colSpan={4} className="td-empty">{t.noData}</td></tr>}
+        </tbody>
+      </table>
     </div>
   );
 }

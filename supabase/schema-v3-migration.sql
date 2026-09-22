@@ -4,7 +4,40 @@
 
 -- Akses Weave-DevOps tersembunyi dari user/admin biasa.
 alter table public.profiles add column if not exists dev_access boolean not null default false;
+alter table public.profiles add column if not exists dev_role text;
 alter table public.projects add column if not exists company text not null default '';
+
+-- ─── Scheduled Popups ─────────────────────────────────────────────────────────
+create table if not exists public.app_popups (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text not null,
+  starts_at date not null,
+  ends_at date not null,
+  is_active boolean not null default true,
+  custom_label text,
+  custom_url text,
+  close_label text not null default 'OK',
+  created_by uuid not null references public.profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint popup_date_range check (ends_at >= starts_at),
+  constraint popup_custom_button check ((custom_label is null and custom_url is null) or (custom_label is not null and custom_url is not null))
+);
+alter table public.app_popups alter column close_label drop not null;
+
+create table if not exists public.dev_updates (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text not null,
+  created_by uuid not null references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+
+alter table public.app_popups enable row level security;
+alter table public.dev_updates enable row level security;
+drop policy if exists "anyone can read active popups" on public.app_popups;
+create policy "anyone can read active popups" on public.app_popups for select to anon, authenticated using (current_date between starts_at and ends_at);
 
 -- ─── Admin Settings ────────────────────────────────────────────────────────────
 -- Menyimpan konfigurasi global: toggle buat akun, domain login default
