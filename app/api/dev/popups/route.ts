@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
   }
   const { data, error } = await db().from('app_popups').insert({ title, body: content, starts_at, ends_at, custom_label, custom_url, close_label, created_by: auth.profile.id }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await db().from('dev_logs').insert({ operator_id: auth.profile.id, action: 'CREATE_POPUP', target_user_id: null, details: { popup_id: data.id, title } });
   return NextResponse.json(data);
 }
 
@@ -53,6 +54,7 @@ export async function PATCH(request: NextRequest) {
   if (!id || typeof is_active !== 'boolean') return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
   const { error } = await db().from('app_popups').update({ is_active, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await db().from('dev_logs').insert({ operator_id: auth.profile.id, action: is_active ? 'ACTIVATE_POPUP' : 'DEACTIVATE_POPUP', details: { popup_id: id } });
   return NextResponse.json({ ok: true });
 }
 
@@ -63,5 +65,6 @@ export async function DELETE(request: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Popup ID is required.' }, { status: 400 });
   const { error } = await db().from('app_popups').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await db().from('dev_logs').insert({ operator_id: auth.profile.id, action: 'DELETE_POPUP', details: { popup_id: id } });
   return NextResponse.json({ ok: true });
 }

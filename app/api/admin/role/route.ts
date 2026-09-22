@@ -11,6 +11,13 @@ function adminClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
+async function writeAudit(db: ReturnType<typeof adminClient>, request: NextRequest, operatorId: string, targetUserId: string, details: any) {
+  const isDev = request.headers.get('x-action-source') === 'dev';
+  return db.from(isDev ? 'dev_logs' : 'admin_logs').insert(isDev
+    ? { operator_id: operatorId, action: 'UPDATE_ROLE', target_user_id: targetUserId, details }
+    : { admin_id: operatorId, action: 'UPDATE_ROLE', target_user_id: targetUserId, details });
+}
+
 async function verifyAdmin(request: NextRequest) {
   const token = request.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return null;
@@ -55,12 +62,7 @@ export async function PATCH(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   // Insert admin log
-  await db.from('admin_logs').insert({
-    admin_id: auth.profile.id,
-    action: 'UPDATE_ROLE',
-    target_user_id: id,
-    details: { old_role: oldRole, new_role: role, target_name: oldProfile?.full_name, email },
-  });
+  await writeAudit(db, request, auth.profile.id, id, { old_role: oldRole, new_role: role, target_name: oldProfile?.full_name, email });
 
   return NextResponse.json({ ok: true });
 }

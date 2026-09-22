@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       admin:profiles!admin_logs_admin_id_fkey(full_name),
       target:profiles!admin_logs_target_user_id_fkey(full_name)
     `, { count: 'exact' })
+    .not('action', 'in', '(UPDATE_DEV_ACCESS,BULK_CREATE_USER,CREATE_POPUP,ACTIVATE_POPUP,DEACTIVATE_POPUP,DELETE_POPUP,CREATE_DEV_UPDATE)')
     .order('created_at', { ascending: false })
     .range(from, from + limit - 1);
 

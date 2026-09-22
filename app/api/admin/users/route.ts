@@ -10,6 +10,13 @@ function adminClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
+async function writeAudit(db: ReturnType<typeof adminClient>, request: NextRequest, operatorId: string, action: string, targetUserId: string | null, details: any) {
+  const isDev = request.headers.get('x-action-source') === 'dev';
+  return db.from(isDev ? 'dev_logs' : 'admin_logs').insert(isDev
+    ? { operator_id: operatorId, action, target_user_id: targetUserId, details }
+    : { admin_id: operatorId, action, target_user_id: targetUserId, details });
+}
+
 async function verifyAdmin(request: NextRequest) {
   const token = request.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return null;
@@ -35,12 +42,7 @@ export async function POST(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   // Log
-  await db.from('admin_logs').insert({
-    admin_id: auth.profile.id,
-    action: 'CREATE_USER',
-    target_user_id: data.user?.id || null,
-    details: { email, full_name },
-  });
+  await writeAudit(db, request, auth.profile.id, 'CREATE_USER', data.user?.id || null, { email, full_name });
 
   return NextResponse.json({ ok: true });
 }
@@ -64,12 +66,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Log
-  await db.from('admin_logs').insert({
-    admin_id: auth.profile.id,
-    action: 'UPDATE_USER',
-    target_user_id: id,
-    details: { old_name: oldProfile?.full_name, new_name: full_name, password_changed: !!(password && password.length >= 6) },
-  });
+  await writeAudit(db, request, auth.profile.id, 'UPDATE_USER', id, { old_name: oldProfile?.full_name, new_name: full_name, password_changed: !!(password && password.length >= 6) });
 
   return NextResponse.json({ ok: true });
 }
@@ -95,12 +92,7 @@ export async function DELETE(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   // Log
-  await db.from('admin_logs').insert({
-    admin_id: auth.profile.id,
-    action: 'DELETE_USER',
-    target_user_id: null,
-    details: { deleted_id: id, email, full_name: targetProfile?.full_name },
-  });
+  await writeAudit(db, request, auth.profile.id, 'DELETE_USER', null, { deleted_id: id, email, full_name: targetProfile?.full_name });
 
   return NextResponse.json({ ok: true });
 }

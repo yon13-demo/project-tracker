@@ -8,6 +8,13 @@ function adminClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
+async function writeAudit(db: ReturnType<typeof adminClient>, request: NextRequest, operatorId: string, action: string, details: any) {
+  const isDev = request.headers.get('x-action-source') === 'dev';
+  return db.from(isDev ? 'dev_logs' : 'admin_logs').insert(isDev
+    ? { operator_id: operatorId, action, details }
+    : { admin_id: operatorId, action, details });
+}
+
 async function verifyAdmin(request: NextRequest) {
   const token = request.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return null;
@@ -83,11 +90,7 @@ export async function PATCH(request: NextRequest) {
           ? 'TOGGLE_MAINTENANCE'
         : 'SET_DOMAIN';
   if (auth.profile?.id) {
-    await db.from('admin_logs').insert({
-      admin_id: auth.profile.id,
-      action,
-      details: body,
-    });
+    await writeAudit(db, request, auth.profile.id, action, body);
   }
 
   return NextResponse.json({ ok: true });

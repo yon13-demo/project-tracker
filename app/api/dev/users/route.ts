@@ -59,8 +59,8 @@ export async function PATCH(request: NextRequest) {
   if (dev_role !== undefined) updates.dev_role = dev_role;
   const { error } = await db.from('profiles').update(updates).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  await db.from('admin_logs').insert({
-    admin_id: auth.profile.id,
+  await db.from('dev_logs').insert({
+    operator_id: auth.profile.id,
     action: 'UPDATE_DEV_ACCESS',
     target_user_id: id,
     details: { dev_access },
@@ -91,8 +91,8 @@ export async function POST(request: NextRequest) {
       continue;
     }
     results.push({ email, full_name, ok: true });
-    await db.from('admin_logs').insert({
-      admin_id: auth.profile.id,
+    await db.from('dev_logs').insert({
+      operator_id: auth.profile.id,
       action: 'BULK_CREATE_USER',
       target_user_id: data.user?.id || null,
       details: { email, full_name },

@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 
 type DevUser = { id: string; full_name: string; email: string; role: 'admin' | 'user'; dev_access: boolean; dev_role?: string | null };
 type DevSettings = { allow_signup: boolean; maintenance_mode: boolean; use_domain_login: boolean; login_method: 'password' | 'microsoft' | 'both'; login_domain: string; main_domain: string };
-type DevLog = { id: string; action: string; details: any; created_at: string; admin?: { full_name: string } | null; target?: { full_name: string } | null };
+type DevLog = { id: string; action: string; details: any; created_at: string; operator?: { full_name: string } | null; target?: { full_name: string } | null };
 type ManagedPopup = { id: string; title: string; body: string; starts_at: string; ends_at: string; is_active: boolean; custom_label: string | null; custom_url: string | null; close_label: string | null };
 type DevUpdate = { id: string; title: string; body: string; created_at: string; created_by?: { full_name: string } | null };
 const DEVOPS_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
@@ -75,7 +75,7 @@ export default function DevPage() {
         main_domain: data.main_domain || '',
       });
     }
-    const logsResponse = await fetch('/api/admin/logs?page=1', { headers: { Authorization: `Bearer ${accessToken}` } });
+    const logsResponse = await fetch('/api/dev/logs?page=1', { headers: { Authorization: `Bearer ${accessToken}` } });
     if (logsResponse.ok) setLogs((await logsResponse.json()).logs || []);
     const [popupsResponse, updatesResponse] = await Promise.all([
       fetch('/api/dev/popups', { headers: { Authorization: `Bearer ${accessToken}` } }),
@@ -93,7 +93,7 @@ export default function DevPage() {
     const accessToken = await token();
     const response = await fetch('/api/admin/settings', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, 'X-Action-Source': 'dev' },
       body: JSON.stringify({ [key]: value }),
     });
     setSaving(false);
@@ -127,7 +127,7 @@ export default function DevPage() {
     if (isDomainDevOps(user.email)) return;
     const accessToken = await token();
     const response = await fetch('/api/admin/role', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, 'X-Action-Source': 'dev' },
       body: JSON.stringify({ id: user.id, role }),
     });
     if (response.ok) setUsers(current => current.map(item => item.id === user.id ? { ...item, role } : item));
@@ -140,7 +140,7 @@ export default function DevPage() {
     if (password.length < 6) return setMessage('Password minimal 6 karakter.');
     const accessToken = await token();
     const response = await fetch('/api/admin/users', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, 'X-Action-Source': 'dev' },
       body: JSON.stringify({ id: user.id, full_name: user.full_name, password }),
     });
     setMessage(response.ok ? 'Password berhasil direset.' : (await response.json()).error || 'Gagal mereset password.');
@@ -151,7 +151,7 @@ export default function DevPage() {
     if (!full_name || full_name === user.full_name) return;
     const accessToken = await token();
     const response = await fetch('/api/admin/users', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, 'X-Action-Source': 'dev' },
       body: JSON.stringify({ id: user.id, full_name }),
     });
     if (response.ok) {
@@ -163,7 +163,7 @@ export default function DevPage() {
   async function deleteUser(user: DevUser) {
     if (isDomainDevOps(user.email) || !window.confirm(`Hapus akun ${user.email}?`)) return;
     const accessToken = await token();
-    const response = await fetch(`/api/admin/users?id=${user.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } });
+    const response = await fetch(`/api/admin/users?id=${user.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}`, 'X-Action-Source': 'dev' } });
     if (response.ok) {
       setUsers(current => current.filter(item => item.id !== user.id));
       setMessage('Akun berhasil dihapus.');
@@ -319,7 +319,7 @@ export default function DevPage() {
         <div className="section-header"><h2><Activity size={16} /> Audit log</h2><span className="dev-count">{logs.length} terbaru</span></div>
         <div className="dev-toolbar"><input className="search-input" value={logSearch} onChange={event => setLogSearch(event.target.value)} placeholder="Cari audit log..." /></div>
         <div className="table-wrap"><table><thead><tr><th>Waktu</th><th>Operator</th><th>Aksi</th><th>Target</th></tr></thead><tbody>
-          {logs.filter(log => `${log.admin?.full_name || ''} ${log.action} ${log.target?.full_name || ''} ${log.details?.email || ''}`.toLowerCase().includes(logSearch.toLowerCase())).map(log => <tr key={log.id}><td className="dev-log-time">{new Date(log.created_at).toLocaleString('id-ID')}</td><td>{log.admin?.full_name || '—'}</td><td>{log.action}</td><td>{log.target?.full_name || log.details?.email || '—'}</td></tr>)}
+          {logs.filter(log => `${log.operator?.full_name || ''} ${log.action} ${log.target?.full_name || ''} ${log.details?.email || ''}`.toLowerCase().includes(logSearch.toLowerCase())).map(log => <tr key={log.id}><td className="dev-log-time">{new Date(log.created_at).toLocaleString('id-ID')}</td><td>{log.operator?.full_name || '—'}</td><td>{log.action}</td><td>{log.target?.full_name || log.details?.email || '—'}</td></tr>)}
           {!logs.length && <tr><td colSpan={4} className="td-empty">Belum ada log.</td></tr>}
         </tbody></table></div>
       </section>

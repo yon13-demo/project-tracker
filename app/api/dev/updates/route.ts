@@ -32,5 +32,6 @@ export async function POST(request: NextRequest) {
   if (!String(title || '').trim() || !String(body || '').trim()) return NextResponse.json({ error: 'Title and content are required.' }, { status: 400 });
   const { data, error } = await db().from('dev_updates').insert({ title: String(title).trim(), body: String(body).trim(), created_by: auth.profile.id }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await db().from('dev_logs').insert({ operator_id: auth.profile.id, action: 'CREATE_DEV_UPDATE', details: { update_id: data.id, title: String(title).trim() } });
   return NextResponse.json(data);
 }

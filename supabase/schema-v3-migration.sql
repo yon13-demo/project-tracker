@@ -119,9 +119,20 @@ create table if not exists public.admin_logs (
   created_at timestamptz not null default now()
 );
 
+-- Log khusus aktivitas Weave-DevOps dan IT-Ops di halaman /dev.
+create table if not exists public.dev_logs (
+  id uuid primary key default gen_random_uuid(),
+  operator_id uuid not null references public.profiles(id) on delete cascade,
+  action text not null,
+  target_user_id uuid references public.profiles(id) on delete set null,
+  details jsonb,
+  created_at timestamptz not null default now()
+);
+
 -- RLS
 alter table public.admin_settings enable row level security;
 alter table public.admin_logs enable row level security;
+alter table public.dev_logs enable row level security;
 
 -- admin_settings: semua authenticated bisa baca (untuk cek allow_signup & login_domain di halaman login)
 drop policy if exists "anyone can read settings" on public.admin_settings;
@@ -136,3 +147,8 @@ drop policy if exists "admins read logs" on public.admin_logs;
 create policy "admins read logs" on public.admin_logs for select to authenticated using (public.is_admin());
 drop policy if exists "admins insert logs" on public.admin_logs;
 create policy "admins insert logs" on public.admin_logs for insert to authenticated with check (public.is_admin());
+
+drop policy if exists "dev operators read logs" on public.dev_logs;
+create policy "dev operators read logs" on public.dev_logs for select to authenticated using (public.is_admin());
+drop policy if exists "dev operators insert logs" on public.dev_logs;
+create policy "dev operators insert logs" on public.dev_logs for insert to authenticated with check (public.is_admin());
