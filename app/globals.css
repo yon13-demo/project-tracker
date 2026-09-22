@@ -377,6 +377,21 @@ p { margin: 0; color: var(--muted); }
 
 /* ─── Admin View ─────────────────────────────────────────────────────────── */
 .admin-view { display: grid; gap: 22px; }
+.dev-page { padding-bottom: 80px; }
+.dev-hero { display: flex; align-items: center; gap: 14px; margin: 4px 0 22px; }
+.dev-hero h1 { font-size: 24px; }
+.dev-hero-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 12px; background: var(--brand-soft); color: var(--brand); }
+.dev-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; margin-bottom: 22px; }
+.dev-page .admin-section h2 { display: flex; align-items: center; gap: 7px; }
+.dev-help { font-size: 12px; margin-bottom: 12px; }
+.bulk-input { width: 100%; resize: vertical; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--ink); background: var(--bg); font: inherit; }
+.dev-inline-field { display: flex; gap: 8px; }
+.dev-inline-field input { flex: 1; min-width: 0; }
+.dev-setting-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
+.dev-count { color: var(--muted); font-size: 12px; }
+.dev-message { margin: -6px 0 18px; }
+.dev-stats { margin-bottom: 22px; }
+.dev-log-time { white-space: nowrap; color: var(--muted); font-size: 12px; }
 .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .stat-card {
   background: var(--card); border: 1px solid var(--line);
@@ -526,6 +541,13 @@ tbody tr:hover { background: #fafbff; }
   .export-periods { width: 100%; }
   .export-periods .btn-secondary { flex: 1; justify-content: center; }
   .export-controls { width: 100%; }
+  .records-section .section-actions { flex-direction: column; align-items: stretch; }
+  .records-section .export-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .records-section .export-controls .sort-select,
+  .records-section .export-controls .date-filter,
+  .records-section .export-controls .btn-secondary { width: 100%; min-width: 0; }
+  .records-section .export-controls .sort-select { grid-column: 1 / -1; }
+  .records-section .date-filter-separator { display: none; }
   .export-controls .sort-select,
   .export-controls .date-filter,
   .export-controls .btn-secondary { flex: 1; min-width: 0; }
@@ -574,6 +596,9 @@ tbody tr:hover { background: #fafbff; }
 
   /* Admin section */
   .admin-section { padding: 14px; }
+  .dev-grid { grid-template-columns: 1fr; gap: 16px; }
+  .dev-hero h1 { font-size: 20px; }
+  .records-section .table-wrap { margin-left: -2px; margin-right: -2px; }
 }
 
 @media (max-width: 420px) {

@@ -41,10 +41,10 @@ export default function LoginDev() {
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: '1px solid #1e1e1e' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#e5e5e5', fontWeight: 700, fontSize: 18 }}>
           <Image src="/logo/weaver.svg" alt="Weave" width={36} height={36} style={{ objectFit: 'contain' }} />
-          Weave <span style={{ color: '#6366f1', fontSize: 12, fontWeight: 600, background: '#1e1b4b', padding: '2px 8px', borderRadius: 20 }}>DEV</span>
+          Weave-DevOps
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#6366f1', fontSize: 13 }}>
-          <Terminal size={14} /> Developer Portal
+          <Terminal size={14} /> Weave-DevOps Portal
         </div>
       </header>
 
@@ -58,9 +58,9 @@ export default function LoginDev() {
           padding: '32px 28px',
           boxShadow: '0 0 40px rgba(99,102,241,0.08)'
         }}>
-          <h1 style={{ color: '#e5e5e5', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Developer Login</h1>
+          <h1 style={{ color: '#e5e5e5', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Weave-DevOps Login</h1>
           <p style={{ color: '#666', fontSize: 13, marginBottom: 28 }}>
-            Gunakan akun LeonxLab untuk mengakses portal dev.
+            Gunakan akun LeonXLab untuk mengakses Weave-DevOps.
           </p>
 
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

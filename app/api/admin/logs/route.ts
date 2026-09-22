@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
+const DEVOPS_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 
 function adminClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -13,8 +14,10 @@ async function verifyAdmin(request: NextRequest) {
   const db = adminClient();
   const { data: { user } } = await db.auth.getUser(token);
   if (!user) return null;
-  const { data: profile } = await db.from('profiles').select('role').eq('id', user.id).single();
-  return profile?.role === 'admin' ? user : null;
+  const { data: profile } = await db.from('profiles').select('role,dev_access').eq('id', user.id).single();
+  const email = user.email?.toLowerCase() || '';
+  const isDevOps = DEVOPS_DOMAINS.some(domain => email.endsWith(`@${domain}`));
+  return profile?.role === 'admin' || profile?.dev_access || isDevOps ? user : null;
 }
 
 // GET /api/admin/logs — paginated admin logs

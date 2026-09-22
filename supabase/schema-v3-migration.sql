@@ -2,6 +2,10 @@
 -- Tambahkan setelah schema-v2.sql
 -- Jalankan di Supabase SQL Editor
 
+-- Akses Weave-DevOps tersembunyi dari user/admin biasa.
+alter table public.profiles add column if not exists dev_access boolean not null default false;
+alter table public.projects add column if not exists company text not null default '';
+
 -- ─── Admin Settings ────────────────────────────────────────────────────────────
 -- Menyimpan konfigurasi global: toggle buat akun, domain login default
 create table if not exists public.admin_settings (

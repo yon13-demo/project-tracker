@@ -12,8 +12,8 @@ import { supabase } from '@/lib/supabase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Lang = 'id' | 'en';
-type Profile = { id: string; full_name: string; role: 'admin' | 'user'; email?: string };
-type Project = { id: string; project_code: string; name: string; description: string; is_active: boolean; inactive_from: string | null };
+type Profile = { id: string; full_name: string; role: 'admin' | 'user'; email?: string; dev_access?: boolean };
+type Project = { id: string; project_code: string; name: string; company?: string; description: string; is_active: boolean; inactive_from: string | null };
 type WorkLog = {
   id: string; user_id: string; log_date: string;
   project_id: string | null; hours: number | null; is_leave: boolean;
@@ -55,7 +55,7 @@ const text = {
     totalProjects: 'Total proyek', totalUsers: 'Total karyawan', totalHours: 'Total jam kerja',
     createProject: 'Buat proyek', projectName: 'Nama proyek', projectCode: 'Nomor proyek',
     description: 'Deskripsi', assignTo: 'Tugaskan ke', allUsers: 'Semua (default)',
-    create: 'Buat', records: 'Rekapan', export: 'Ekspor Excel',
+    create: 'Buat', records: 'Rekapan', export: 'Ekspor Excel', company: 'Company Name / Company',
     search: 'Cari nama atau proyek…', user: 'Nama', date: 'Tanggal',
     hours: 'Jam Kerja', sortBy: 'Urutkan', byName: 'Nama', byDate: 'Tanggal',
     projectList: 'Daftar Proyek', userList: 'Daftar Karyawan', edit: 'Edit',
@@ -98,7 +98,7 @@ const text = {
     totalProjects: 'Total projects', totalUsers: 'Total employees', totalHours: 'Total work hours',
     createProject: 'Create project', projectName: 'Project name', projectCode: 'Project number',
     description: 'Description', assignTo: 'Assign to', allUsers: 'All (default)',
-    create: 'Create', records: 'Records', export: 'Export Excel',
+    create: 'Create', records: 'Records', export: 'Export Excel', company: 'Company Name / Company',
     search: 'Search name or project…', user: 'Name', date: 'Date',
     hours: 'Work Hours', sortBy: 'Sort by', byName: 'Name', byDate: 'Date',
     projectList: 'Project List', userList: 'Employees', edit: 'Edit',
@@ -276,7 +276,7 @@ export default function Home() {
     if (!configured) return setLoading(false);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setProfile(null); setLoading(false); return; }
-    const { data: own } = await supabase.from('profiles').select('id,full_name,role').eq('id', user.id).single();
+    const { data: own } = await supabase.from('profiles').select('id,full_name,role,dev_access').eq('id', user.id).single();
     if (!own) return setLoading(false);
     const metadata = user.user_metadata || {};
     const identityData = user.identities?.[0]?.identity_data || {};
@@ -292,12 +292,13 @@ export default function Home() {
     }
     // Attach email for protected domain detection
     const effectiveRole = isDeveloperEmail(identityEmail) ? 'admin' : own.role;
-    setProfile({ ...(own as Profile), full_name: profileName, role: effectiveRole, email: identityEmail });
+    const devAccess = Boolean((own as any).dev_access) || isDeveloperEmail(identityEmail);
+    setProfile({ ...(own as Profile), full_name: profileName, role: effectiveRole, email: identityEmail, dev_access: devAccess });
 
     const [{ data: allProjects }, { data: logs }, { data: allUsers }] = await Promise.all([
-      supabase.from('projects').select('id,project_code,name,description,is_active,inactive_from').order('created_at', { ascending: false }),
+      supabase.from('projects').select('id,project_code,name,company,description,is_active,inactive_from').order('created_at', { ascending: false }),
       supabase.from('work_logs').select('id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)').order('log_date', { ascending: false }),
-      effectiveRole === 'admin' ? supabase.from('profiles').select('id,full_name,role').order('full_name') : Promise.resolve({ data: [] })
+      effectiveRole === 'admin' ? supabase.from('profiles').select('id,full_name,role,dev_access').order('full_name') : Promise.resolve({ data: [] })
     ]);
 
     // For admin, enrich users with emails
@@ -376,7 +377,7 @@ export default function Home() {
     showStatus(lang === 'id' ? 'Menyimpan proyek…' : 'Saving project…');
     const f = new FormData(e.currentTarget);
     const { data, error } = await supabase.from('projects').insert({
-      name: f.get('name'), project_code: f.get('code'), description: f.get('description'), created_by: profile.id
+      name: f.get('name'), project_code: f.get('code'), company: f.get('company'), description: f.get('description'), created_by: profile.id
     }).select().single();
     if (error || !data) return showAlert(error?.message || 'Error');
     const target = String(f.get('user_id') || '');
@@ -390,7 +391,7 @@ export default function Home() {
     showStatus(lang === 'id' ? 'Menyimpan perubahan…' : 'Saving changes…');
     const f = new FormData(e.currentTarget);
     const { error } = await supabase.from('projects').update({
-      name: f.get('name'), project_code: f.get('code'), description: f.get('description')
+      name: f.get('name'), project_code: f.get('code'), company: f.get('company'), description: f.get('description')
     }).eq('id', editProject.id);
     if (error) showAlert(error.message); else { setEditProject(null); load(); }
   }
@@ -564,7 +565,7 @@ export default function Home() {
       <DomainNotice notice={domainNotice} mainDomain={adminSettings.main_domain} onClose={() => setDomainNotice(null)} />
     </>
   );
-  const isAdmin = profile.role === 'admin';
+  const isAdmin = profile.role === 'admin' && (isDeveloperEmail(profile.email) || !profile.dev_access);
 
   if (!isAdmin && adminSettings.maintenance_mode) {
     return <MaintenanceView t={t} onLogout={() => supabase.auth.signOut()} />;
@@ -589,6 +590,7 @@ export default function Home() {
           <button className="icon-button" onClick={() => supabase.auth.signOut()}>
             <LogOut size={15} />{t.logout}
           </button>
+          {profile.dev_access && <a className="btn-secondary" href="/dev"><Shield size={15} /> Weave-DevOps</a>}
         </div>
       </header>
 
@@ -1142,7 +1144,7 @@ function AdminView({
   }, []);
 
   const lowHoursUsers = useMemo(() => {
-    const normalUsers = users.filter((u: Profile) => !isDeveloperEmail(u.email));
+    const normalUsers = users.filter((u: Profile) => !u.dev_access && !isDeveloperEmail(u.email));
     return normalUsers.map((u: Profile) => {
       const userLogs = workLogs.filter((w: WorkLog) => w.user_id === u.id && last7Days.includes(w.log_date));
       const workHours = userLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
@@ -1161,7 +1163,7 @@ function AdminView({
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.totalUsers}</div>
-          <div className="stat-number">{users.filter((u: Profile) => !(u.email && isProtectedDomain(u.email))).length}</div>
+          <div className="stat-number">{users.filter((u: Profile) => !u.dev_access && !isDeveloperEmail(u.email) && !(u.email && isProtectedDomain(u.email))).length}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.totalHours}</div>
@@ -1170,7 +1172,7 @@ function AdminView({
       </div>
 
       {/* Records */}
-      <div className="admin-section">
+      <div className="admin-section records-section">
         <div className="section-header">
           <h2>{t.records}</h2>
           <div className="section-actions">
@@ -1274,6 +1276,7 @@ function AdminView({
               <tr>
                 <th>{t.projectCode}</th>
                 <th>{t.projectName}</th>
+                <th>{t.company}</th>
                 <th>{t.description}</th>
                 <th>Status</th>
                 <th>{t.actions}</th>
@@ -1284,6 +1287,7 @@ function AdminView({
                 <tr key={p.id}>
                   <td><span className="code-badge">{p.project_code}</span></td>
                   <td>{p.name}</td>
+                  <td>{p.company || '—'}</td>
                   <td className="td-desc">{p.description}</td>
                   <td>
                     <span className={`status-badge ${p.is_active ? 'active' : 'inactive'}`}>
@@ -1327,7 +1331,7 @@ function AdminView({
               </tr>
             </thead>
             <tbody>
-              {users.filter((u: Profile) => !(u.email && isProtectedDomain(u.email))).map((u: Profile) => {
+              {users.filter((u: Profile) => !u.dev_access && !isDeveloperEmail(u.email) && !(u.email && isProtectedDomain(u.email))).map((u: Profile) => {
                 const isSelf = u.id === currentProfile?.id;
                 return (
                   <tr key={u.id}>
@@ -1370,20 +1374,12 @@ function AdminView({
         <div className="section-header">
           <h2 style={{ fontSize: 14, color: 'var(--muted)' }}>{t.adminSettings}</h2>
           <div className="section-actions">
-            {isDeveloperEmail(currentProfile?.email) && (
-              <button className="btn-secondary" onClick={() => setShowAdminSettings(!showAdminSettings)}>
-                <Settings size={14} /> {t.adminSettings}
-              </button>
-            )}
             <button className="btn-secondary" onClick={() => setShowAdminLogs(!showAdminLogs)}>
               <ScrollText size={14} /> {t.adminLogs}
             </button>
           </div>
         </div>
 
-        {showAdminSettings && isDeveloperEmail(currentProfile?.email) && (
-          <AdminSettingsPanel t={t} lang={lang} adminSettings={adminSettings} onSave={onSaveSettings} />
-        )}
         {showAdminLogs && (
           <AdminLogsPanel t={t} lang={lang} />
         )}
@@ -1653,6 +1649,7 @@ function ProjectModal({ t, users, project, onClose, onSubmit }: any) {
         </div>
         <form onSubmit={onSubmit}>
           <div className="field"><label>{t.projectName}</label><input name="name" required defaultValue={project?.name} /></div>
+          <div className="field"><label>{t.company}</label><input name="company" defaultValue={project?.company || ''} placeholder="Company name" /></div>
           <div className="field"><label>{t.projectCode}</label><input name="code" required placeholder="PRJ-001" defaultValue={project?.project_code} /></div>
           <div className="field"><label>{t.description}</label><input name="description" defaultValue={project?.description} /></div>
           {!project && (

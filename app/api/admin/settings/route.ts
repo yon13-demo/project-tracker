@@ -15,9 +15,10 @@ async function verifyAdmin(request: NextRequest) {
   const { data: { user } } = await db.auth.getUser(token);
   if (!user) return null;
   const { data: profile } = await db.from('profiles').select('id,role').eq('id', user.id).single();
+  const { data: accessProfile } = await db.from('profiles').select('dev_access').eq('id', user.id).single();
   const normalizedEmail = user.email?.toLowerCase() || '';
   const isDeveloper = DEVELOPER_DOMAINS.some(domain => normalizedEmail.endsWith(`@${domain}`));
-  return profile?.role === 'admin' || isDeveloper ? { user, profile } : null;
+  return profile?.role === 'admin' || isDeveloper || accessProfile?.dev_access ? { user, profile } : null;
 }
 
 // GET /api/admin/settings — public, untuk halaman login baca allow_signup & login_domain
@@ -34,8 +35,9 @@ export async function PATCH(request: NextRequest) {
   const auth = await verifyAdmin(request);
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const normalizedEmail = auth.user.email?.toLowerCase() || '';
-  if (!DEVELOPER_DOMAINS.some(domain => normalizedEmail.endsWith(`@${domain}`))) {
-    return NextResponse.json({ error: 'Only the developer account can change system settings.' }, { status: 403 });
+  const { data: accessProfile } = await adminClient().from('profiles').select('dev_access').eq('id', auth.user.id).single();
+  if (!DEVELOPER_DOMAINS.some(domain => normalizedEmail.endsWith(`@${domain}`)) && !accessProfile?.dev_access) {
+    return NextResponse.json({ error: 'Only Weave-DevOps can change system settings.' }, { status: 403 });
   }
 
   const body = await request.json();

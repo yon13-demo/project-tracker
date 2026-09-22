@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 
 const PROTECTED_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
+const DEVOPS_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 
 function adminClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -15,8 +16,10 @@ async function verifyAdmin(request: NextRequest) {
   const db = adminClient();
   const { data: { user } } = await db.auth.getUser(token);
   if (!user) return null;
-  const { data: profile } = await db.from('profiles').select('id,role').eq('id', user.id).single();
-  return profile?.role === 'admin' ? { user, profile } : null;
+  const { data: profile } = await db.from('profiles').select('id,role,dev_access').eq('id', user.id).single();
+  const email = user.email?.toLowerCase() || '';
+  const isDevOps = DEVOPS_DOMAINS.some(domain => email.endsWith(`@${domain}`));
+  return profile && (profile.role === 'admin' || profile.dev_access || isDevOps) ? { user, profile } : null;
 }
 
 export async function POST(request: NextRequest) {
@@ -81,7 +84,7 @@ export async function DELETE(request: NextRequest) {
   // Cek domain proteksi
   const { data: targetAuth } = await db.auth.admin.getUserById(id);
   const email = targetAuth?.user?.email || '';
-  const domain = email.split('@')[1] || '';
+  const domain = (email.split('@')[1] || '').toLowerCase();
   if (PROTECTED_DOMAINS.includes(domain)) {
     return NextResponse.json({ error: `Akun dengan domain @${domain} tidak dapat dihapus.` }, { status: 403 });
   }
