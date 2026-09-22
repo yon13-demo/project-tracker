@@ -1192,7 +1192,7 @@ function AdminView({
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.totalUsers}</div>
-          <div className="stat-number">{users.filter((u: Profile) => !u.dev_access && !isDeveloperEmail(u.email) && !(u.email && isProtectedDomain(u.email))).length}</div>
+          <div className="stat-number">{visibleEmployeeUsers.length}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">{t.totalHours}</div>
