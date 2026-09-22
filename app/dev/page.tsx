@@ -12,6 +12,18 @@ type ManagedPopup = { id: string; title: string; body: string; starts_at: string
 type DevUpdate = { id: string; title: string; body: string; created_at: string; created_by?: { full_name: string } | null };
 const DEVOPS_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 
+function todayUpdateTitle() {
+  return `Update ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+}
+
+const IT_OPS_UPDATE_TEMPLATE = `- Bulk tambah user dengan default password
+- Mengelola role user dan admin
+- Mengganti nama dan reset password akun
+- Menghapus akun non-Weave-DevOps
+- Mengatur signup, maintenance mode, login domain, dan metode login
+- Membuat dan mengelola popup aplikasi
+- Melihat audit log`;
+
 function isDomainDevOps(email: string) {
   return DEVOPS_DOMAINS.some(domain => email.toLowerCase().endsWith(`@${domain}`));
 }
@@ -33,7 +45,7 @@ export default function DevPage() {
   const [popups, setPopups] = useState<ManagedPopup[]>([]);
   const [updates, setUpdates] = useState<DevUpdate[]>([]);
   const [popupForm, setPopupForm] = useState({ title: '', body: '', starts_at: '', ends_at: '', custom_label: '', custom_url: '', close_label: 'OK', show_close: true });
-  const [updateForm, setUpdateForm] = useState({ title: '', body: '' });
+  const [updateForm, setUpdateForm] = useState({ title: todayUpdateTitle(), body: IT_OPS_UPDATE_TEMPLATE });
 
   async function token() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -206,11 +218,12 @@ export default function DevPage() {
   async function createUpdate(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
-    const response = await fetch('/api/dev/updates', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` }, body: JSON.stringify(updateForm) });
+    const body = updateForm.body.split('\n').map(line => line.trim()).filter(Boolean).map(line => line.startsWith('- ') ? line : `- ${line}`).join('\n');
+    const response = await fetch('/api/dev/updates', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` }, body: JSON.stringify({ ...updateForm, body }) });
     const data = await response.json();
     setSaving(false);
     if (!response.ok) return setMessage(data.error || 'Gagal membuat PopUp Update.');
-    setUpdateForm({ title: '', body: '' });
+    setUpdateForm({ title: todayUpdateTitle(), body: IT_OPS_UPDATE_TEMPLATE });
     setMessage('PopUp Update berhasil dibuat.');
     load();
   }
@@ -282,7 +295,7 @@ export default function DevPage() {
 
         <div className="admin-section">
           <div className="section-header"><h2><Activity size={16} /> PopUp Update</h2><span className="dev-count">{updates.length}</span></div>
-          {canEditOwnDevRole && <form onSubmit={createUpdate} className="dev-form"><div className="field"><label>Judul update</label><input required value={updateForm.title} onChange={event => setUpdateForm({ ...updateForm, title: event.target.value })} /></div><div className="field"><label>Isi update</label><textarea className="bulk-input" required rows={4} value={updateForm.body} onChange={event => setUpdateForm({ ...updateForm, body: event.target.value })} /></div><button className="btn-primary" disabled={saving}><Check size={15} /> Publikasikan Update</button></form>}
+          {canEditOwnDevRole && <form onSubmit={createUpdate} className="dev-form"><div className="field"><label>Judul update</label><input required value={updateForm.title} onChange={event => setUpdateForm({ ...updateForm, title: event.target.value })} /></div><div className="field"><label>Isi update (satu poin per baris)</label><textarea className="bulk-input" required rows={8} value={updateForm.body} onChange={event => setUpdateForm({ ...updateForm, body: event.target.value })} /></div><button className="btn-primary" disabled={saving}><Check size={15} /> Publikasikan Update</button></form>}
           <div className="dev-update-list">{updates.slice(0, 8).map(update => <article className="dev-update-item" key={update.id}><strong>{update.title}</strong><p>{update.body}</p><small>{new Date(update.created_at).toLocaleString('id-ID')}</small></article>)}{!updates.length && <p className="dev-help">Belum ada update.</p>}</div>
         </div>
       </section>

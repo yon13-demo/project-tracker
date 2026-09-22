@@ -305,7 +305,7 @@ export default function Home() {
     const [{ data: allProjects }, { data: logs }, { data: allUsers }] = await Promise.all([
       supabase.from('projects').select('id,project_code,name,company,description,is_active,inactive_from').order('created_at', { ascending: false }),
       supabase.from('work_logs').select('id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)').order('log_date', { ascending: false }),
-      effectiveRole === 'admin' ? supabase.from('profiles').select('id,full_name,role,dev_access,dev_role').order('full_name') : Promise.resolve({ data: [] })
+      (effectiveRole === 'admin' || Boolean((own as any).dev_access)) ? supabase.from('profiles').select('id,full_name,role,dev_access,dev_role').order('full_name') : Promise.resolve({ data: [] })
     ]);
 
     // For admin, enrich users with emails
@@ -573,7 +573,7 @@ export default function Home() {
       <AnnouncementPopup popup={activePopups.find(popup => !dismissedPopups.includes(popup.id))} onClose={popup => setDismissedPopups(current => [...current, popup.id])} />
     </>
   );
-  const isAdmin = profile.role === 'admin' && (isDeveloperEmail(profile.email) || !profile.dev_access);
+  const isAdmin = profile.role === 'admin' || Boolean(profile.dev_access);
 
   if (!isAdmin && adminSettings.maintenance_mode) {
     return <MaintenanceView t={t} onLogout={() => supabase.auth.signOut()} />;

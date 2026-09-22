@@ -7,6 +7,14 @@ alter table public.profiles add column if not exists dev_access boolean not null
 alter table public.profiles add column if not exists dev_role text;
 alter table public.projects add column if not exists company text not null default '';
 
+-- IT-Ops memiliki akses database admin yang sama dengan admin biasa.
+create or replace function public.is_admin() returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and (role = 'admin' or dev_access = true)
+  );
+$$;
+
 -- ─── Scheduled Popups ─────────────────────────────────────────────────────────
 create table if not exists public.app_popups (
   id uuid primary key default gen_random_uuid(),
