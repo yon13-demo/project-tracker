@@ -98,3 +98,54 @@ export function formatClock(ms: number): string {
   const s = total % 60;
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
+
+export function markIdle(state: DayTimerState, since: number): DayTimerState {
+  if (state.status !== 'running' || state.idleSince !== null) return state;
+  return { ...state, idleSince: since };
+}
+
+// Call when the user is active again and when the app loads.
+export function detectAway(state: DayTimerState, now: number): DayTimerState {
+  if (state.status !== 'running' || state.pendingAway) return { ...state, idleSince: null, lastSeen: now };
+  const open = state.segments.find(s => s.end === null);
+  // Heartbeats pause while the user is idle, so an idle mark wins over a stale lastSeen.
+  const gapStart = state.idleSince ?? (now - state.lastSeen >= AWAY_THRESHOLD_MS ? state.lastSeen : null);
+  if (open && gapStart !== null) {
+    const start = Math.max(gapStart, open.start);
+    if (now - start >= AWAY_THRESHOLD_MS) {
+      return { ...state, pendingAway: { start, end: now, itemId: open.itemId }, idleSince: null, lastSeen: now };
+    }
+  }
+  return { ...state, idleSince: null, lastSeen: now };
+}
+
+// Call on every heartbeat. While the user is idle we wait for them to come back before asking.
+export function tick(state: DayTimerState, now: number): DayTimerState {
+  if (state.idleSince !== null) return state;
+  return detectAway(state, now);
+}
+
+export function cutRange(segments: TimerSegment[], start: number, end: number): TimerSegment[] {
+  const out: TimerSegment[] = [];
+  for (const s of segments) {
+    const sEnd = s.end ?? Infinity;
+    if (sEnd <= start || s.start >= end) { out.push(s); continue; }
+    if (s.start < start) out.push({ ...s, end: start });
+    if (sEnd > end) out.push({ ...s, start: end });
+  }
+  return out;
+}
+
+export type AwayChoice = { type: 'keep' } | { type: 'discard' } | { type: 'move'; itemId: string };
+
+export function resolveAway(state: DayTimerState, choice: AwayChoice): DayTimerState {
+  const away = state.pendingAway;
+  if (!away) return state;
+  if (choice.type === 'move' && !state.items.some(i => i.id === choice.itemId)) return state;
+  let segments = state.segments;
+  if (choice.type !== 'keep') segments = cutRange(segments, away.start, away.end);
+  if (choice.type === 'move') {
+    segments = [...segments, { itemId: choice.itemId, start: away.start, end: away.end }].sort((a, b) => a.start - b.start);
+  }
+  return { ...state, segments, pendingAway: null };
+}

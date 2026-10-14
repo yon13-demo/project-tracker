@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addItem, createDay, currentItemId, dayTotal, formatClock, itemTotals, localDateStr, pause, resume, switchTo,
+  addItem, AWAY_THRESHOLD_MS, createDay, currentItemId, cutRange, dayTotal, detectAway, formatClock, itemTotals, localDateStr, markIdle,
+  pause, resolveAway, resume, switchTo, tick,
   type DayTimerState, type TimerItem,
 } from './dayTimer';
 
@@ -70,5 +71,99 @@ describe('formatClock', () => {
     expect(formatClock(0)).toBe('0:00:00');
     expect(formatClock(3_725_000)).toBe('1:02:05');
     expect(formatClock(-5)).toBe('0:00:00');
+  });
+});
+
+describe('away detection', () => {
+  const running = () => switchTo(dayWith('a', 'b'), 'a', T0);
+
+  it('sleep gap: a heartbeat after a long gap creates a prompt from the last heartbeat', () => {
+    const s = tick(running(), T0 + 40 * MIN);
+    expect(s.pendingAway).toEqual({ start: T0, end: T0 + 40 * MIN, itemId: 'a' });
+  });
+
+  it('short gaps just count', () => {
+    const s = tick(running(), T0 + 9 * MIN);
+    expect(s.pendingAway).toBeNull();
+    expect(s.lastSeen).toBe(T0 + 9 * MIN);
+  });
+
+  it('idle then sleep: one prompt from the moment the user went idle', () => {
+    let s = tick(running(), T0 + 5 * MIN);          // heartbeat at 08:05
+    s = markIdle(s, T0 + 6 * MIN);                  // idle/locked at 08:06
+    s = tick(s, T0 + 8 * 60 * MIN);                 // PC slept, wakes at 16:00 while still idle
+    expect(s.pendingAway).toBeNull();               // wait until the user is back
+    s = detectAway(s, T0 + 8 * 60 * MIN + MIN);     // user active at 16:01
+    expect(s.pendingAway).toEqual({ start: T0 + 6 * MIN, end: T0 + 8 * 60 * MIN + MIN, itemId: 'a' });
+    expect(s.idleSince).toBeNull();
+  });
+
+  it('idle shorter than the threshold does not prompt', () => {
+    let s = markIdle(running(), T0 + MIN);
+    s = detectAway(s, T0 + MIN + AWAY_THRESHOLD_MS - 1);
+    expect(s.pendingAway).toBeNull();
+    expect(s.idleSince).toBeNull();
+  });
+
+  it('paused days never prompt', () => {
+    const s = tick(pause(running(), T0 + MIN), T0 + 5 * 60 * MIN);
+    expect(s.pendingAway).toBeNull();
+  });
+
+  it('the gap never starts before the running segment', () => {
+    let s = switchTo(running(), 'b', T0 + 30 * MIN);
+    s = { ...s, idleSince: T0 }; // stale idle mark from before the switch
+    s = detectAway(s, T0 + 60 * MIN);
+    expect(s.pendingAway?.start).toBe(T0 + 30 * MIN);
+  });
+
+  it('switching and pausing are blocked while a prompt is open', () => {
+    const s = tick(running(), T0 + 40 * MIN);
+    expect(switchTo(s, 'b', T0 + 41 * MIN)).toBe(s);
+    expect(pause(s, T0 + 41 * MIN)).toBe(s);
+  });
+});
+
+describe('cutRange', () => {
+  it('splits an open segment around the cut and keeps it open', () => {
+    expect(cutRange([{ itemId: 'a', start: 0, end: null }], 10, 20)).toEqual([
+      { itemId: 'a', start: 0, end: 10 },
+      { itemId: 'a', start: 20, end: null },
+    ]);
+  });
+  it('removes segments fully inside the cut and trims overlaps', () => {
+    expect(cutRange([
+      { itemId: 'a', start: 0, end: 12 },
+      { itemId: 'b', start: 12, end: 15 },
+      { itemId: 'a', start: 15, end: 30 },
+    ], 10, 20)).toEqual([
+      { itemId: 'a', start: 0, end: 10 },
+      { itemId: 'a', start: 20, end: 30 },
+    ]);
+  });
+});
+
+describe('resolveAway', () => {
+  const prompted = () => tick(switchTo(dayWith('a', 'b'), 'a', T0), T0 + 40 * MIN); // away 08:00–08:40
+  const at = T0 + 60 * MIN;
+
+  it('keep: the away time stays on the item', () => {
+    const s = resolveAway(prompted(), { type: 'keep' });
+    expect(s.pendingAway).toBeNull();
+    expect(itemTotals(s, at)).toEqual({ a: 60 * MIN, b: 0 });
+  });
+  it('discard: the away time is removed and the item keeps running', () => {
+    const s = resolveAway(prompted(), { type: 'discard' });
+    expect(currentItemId(s)).toBe('a');
+    expect(itemTotals(s, at)).toEqual({ a: 20 * MIN, b: 0 });
+  });
+  it('move: the away time goes to the chosen item', () => {
+    const s = resolveAway(prompted(), { type: 'move', itemId: 'b' });
+    expect(currentItemId(s)).toBe('a');
+    expect(itemTotals(s, at)).toEqual({ a: 20 * MIN, b: 40 * MIN });
+  });
+  it('move to an unknown item changes nothing', () => {
+    const s = prompted();
+    expect(resolveAway(s, { type: 'move', itemId: 'nope' })).toBe(s);
   });
 });
