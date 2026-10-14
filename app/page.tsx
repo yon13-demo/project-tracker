@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Image from 'next/image';
 import {
   Globe2, KeyRound, LogOut, Pencil, Plus, Trash2, UserPlus, Users,
@@ -215,6 +215,7 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
   const [manualProjects, setManualProjects] = useState(false);
+  const [changePassOpen, setChangePassOpen] = useState(false);
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -604,8 +605,8 @@ export default function Home() {
       <header className="topbar">
         <Brand />
         <div className="top-actions">
-          <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
-            <Globe2 size={14} /> {lang === 'id' ? 'EN' : 'ID'}
+          <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')} title={lang === 'id' ? 'Switch to English' : 'Ganti ke Bahasa Indonesia'}>
+            <Globe2 size={14} /> {lang.toUpperCase()}
           </button>
           <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title={theme === 'light' ? t.darkMode : t.lightMode}>
             {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
@@ -615,6 +616,9 @@ export default function Home() {
               <UserCog size={15} /> {adminMode === 'user' ? t.switchToAdmin : t.switchToEmployee}
             </button>
           )}
+          <button className="icon-button" onClick={() => setChangePassOpen(true)}>
+            <KeyRound size={15} />{t.changePassword}
+          </button>
           <button className="icon-button" onClick={() => supabase.auth.signOut()}>
             <LogOut size={15} />{t.logout}
           </button>
@@ -641,6 +645,7 @@ export default function Home() {
         <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} manualProjects={manualProjects} onRefresh={load} />
       )}
 
+      {changePassOpen && <ChangePasswordModal t={t} lang={lang} onClose={() => setChangePassOpen(false)} />}
       {createOpen && <ProjectModal t={t} users={users} onClose={() => setCreateOpen(false)} onSubmit={createProjectFn} />}
       {editProject && <ProjectModal t={t} users={users} project={editProject} onClose={() => setEditProject(null)} onSubmit={updateProjectFn} />}
       {userOpen && (
@@ -767,8 +772,8 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSet
       <header className="topbar">
         <Brand />
         <div className="top-actions">
-          <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
-            <Globe2 size={14} /> {lang === 'id' ? 'EN' : 'ID'}
+          <button className="lang-btn" onClick={() => setLang(lang === 'id' ? 'en' : 'id')} title={lang === 'id' ? 'Switch to English' : 'Ganti ke Bahasa Indonesia'}>
+            <Globe2 size={14} /> {lang.toUpperCase()}
           </button>
           <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title={theme === 'light' ? t.darkMode : t.lightMode}>
             {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
@@ -833,6 +838,49 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSet
 }
 
 // ─── User View ────────────────────────────────────────────────────────────────
+function ChangePasswordModal({ t, lang, onClose }: { t: any; lang: Lang; onClose: () => void }) {
+  async function handleChangePassword(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const newPass = (f.get('new_password') as string || '').trim();
+    const confirmPass = (f.get('confirm_password') as string || '').trim();
+    if (newPass.length < 6) { showAlert(t.passwordTooShort); return; }
+    if (newPass !== confirmPass) { showAlert(t.passwordMismatch); return; }
+    showStatus(lang === 'id' ? 'Menyimpan password…' : 'Saving password…');
+    const { error } = await supabase.auth.updateUser({ password: newPass });
+    if (error) showAlert(error.message);
+    else { onClose(); showStatus(t.passwordChanged); }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <h2>{t.changePassword}</h2>
+          <button className="btn-ghost-icon" onClick={() => onClose()}><X size={18} /></button>
+        </div>
+        <form onSubmit={handleChangePassword}>
+          <div className="field">
+            <label>{t.newPassword}</label>
+            <input name="new_password" type="password" minLength={6} required placeholder="Min. 6 karakter" />
+          </div>
+          <div className="field">
+            <label>{t.confirmPassword}</label>
+            <input name="confirm_password" type="password" minLength={6} required />
+          </div>
+          <div className="modal-footer">
+            <div />
+            <div className="modal-footer-right">
+              <button type="button" className="btn-secondary" onClick={() => onClose()}>{t.cancel}</button>
+              <button type="submit" className="btn-primary"><KeyRound size={15} />{t.changePassword}</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 type EntryDraft = { tempId: string; project_id: string; custom_name: string; custom_code: string; query: string; hours: string };
 
 function newEntryDraft(): EntryDraft {
@@ -876,20 +924,15 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
   const [saving, setSaving] = useState(false);
   const [dateEntries, setDateEntries] = useState<EntryDraft[]>([newEntryDraft()]);
   const [isLeaveMode, setIsLeaveMode] = useState(false);
-  const [changePassOpen, setChangePassOpen] = useState(false);
+  const addEntryRef = useRef<HTMLButtonElement>(null);
+  const [addedEntryId, setAddedEntryId] = useState<string | null>(null);
 
-  async function handleChangePassword(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    const newPass = (f.get('new_password') as string || '').trim();
-    const confirmPass = (f.get('confirm_password') as string || '').trim();
-    if (newPass.length < 6) { showAlert(t.passwordTooShort); return; }
-    if (newPass !== confirmPass) { showAlert(t.passwordMismatch); return; }
-    showStatus(lang === 'id' ? 'Menyimpan password…' : 'Saving password…');
-    const { error } = await supabase.auth.updateUser({ password: newPass });
-    if (error) showAlert(error.message);
-    else { setChangePassOpen(false); showStatus(t.passwordChanged); }
-  }
+  // After "Tambah Proyek", bring the new row into view and put the cursor in its project field.
+  useEffect(() => {
+    if (!addedEntryId) return;
+    addEntryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.querySelector<HTMLInputElement>(`[data-entry-id="${addedEntryId}"] .combobox input`)?.focus({ preventScroll: true });
+  }, [addedEntryId]);
 
   async function handleDeleteDate(date: string) {
     if (!confirm(`${t.delete} ${formatCardDate(date, lang)}?`)) return;
@@ -921,7 +964,9 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
   }
 
   function addEntry() {
-    setDateEntries(prev => [...prev, newEntryDraft()]);
+    const entry = newEntryDraft();
+    setDateEntries(prev => [...prev, entry]);
+    setAddedEntryId(entry.tempId);
   }
 
   function updateEntry(tempId: string, patch: Partial<EntryDraft>) {
@@ -973,38 +1018,7 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
     <div className="user-view">
       <div className="user-header">
         <h1>{t.welcome}, <span className="user-name">{profile.full_name}</span></h1>
-        <button className="btn-secondary" style={{ marginTop: 8 }} onClick={() => setChangePassOpen(true)}>
-          <KeyRound size={14} /> {t.changePassword}
-        </button>
       </div>
-
-      {changePassOpen && (
-        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setChangePassOpen(false)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2>{t.changePassword}</h2>
-              <button className="btn-ghost-icon" onClick={() => setChangePassOpen(false)}><X size={18} /></button>
-            </div>
-            <form onSubmit={handleChangePassword}>
-              <div className="field">
-                <label>{t.newPassword}</label>
-                <input name="new_password" type="password" minLength={6} required placeholder="Min. 6 karakter" />
-              </div>
-              <div className="field">
-                <label>{t.confirmPassword}</label>
-                <input name="confirm_password" type="password" minLength={6} required />
-              </div>
-              <div className="modal-footer">
-                <div />
-                <div className="modal-footer-right">
-                  <button type="button" className="btn-secondary" onClick={() => setChangePassOpen(false)}>{t.cancel}</button>
-                  <button type="submit" className="btn-primary"><KeyRound size={15} />{t.changePassword}</button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       <div className="worklog-column">
         {!formOpen ? (
@@ -1037,7 +1051,7 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
             {!isLeaveMode && (
               <div className="worklog-entries">
                 {dateEntries.map(entry => (
-                  <div key={entry.tempId} className="entry-row">
+                  <div key={entry.tempId} className="entry-row" data-entry-id={entry.tempId}>
                     <div className="entry-row-fields">
                       <div className="entry-field">
                         <label>{t.namaProyek} / {t.nomorProyek}</label>
@@ -1071,7 +1085,7 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
                     )}
                   </div>
                 ))}
-                <button className="btn-add-entry" onClick={addEntry}>
+                <button ref={addEntryRef} className="btn-add-entry" onClick={addEntry}>
                   <Plus size={14} /> {t.addProject}
                 </button>
               </div>
