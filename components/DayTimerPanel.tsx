@@ -1,6 +1,9 @@
 'use client';
 
+import { createPortal } from 'react-dom';
+import { ExternalLink } from 'lucide-react';
 import { useDayTimer } from './useDayTimer';
+import { usePipWindow } from './usePipWindow';
 import { TimerBody } from './TimerBody';
 import type { Project, WorkLog } from '@/lib/worklog';
 
@@ -8,6 +11,7 @@ export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs
   t: any; lang: 'id' | 'en'; userId: string; projects: Project[]; hasV4Schema: boolean; workLogs: WorkLog[]; onSent: () => void;
 }) {
   const timer = useDayTimer(userId);
+  const pip = usePipWindow();
   const { state } = timer;
 
   if (!timer.isOwner) {
@@ -32,8 +36,18 @@ export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs
       {timer.staleNotice && <p className="timer-stale">{t.timerStaleDay.replace('{date}', timer.staleNotice)}</p>}
       <TimerBody t={t} timer={timer} projects={projects} hasV4Schema={hasV4Schema} />
       <div className="timer-actions timer-footer">
-        <button className="btn-primary" disabled={Boolean(state.pendingAway)} onClick={timer.startReview}>{t.finishDay}</button>
+        {pip.supported && !pip.pipWindow && (
+          <button className="btn-secondary" onClick={() => void pip.open()}><ExternalLink size={14} />{t.popOut}</button>
+        )}
+        <button className="btn-primary" disabled={Boolean(state.pendingAway)}
+          onClick={() => { pip.close(); timer.startReview(); }}>{t.finishDay}</button>
       </div>
+      {pip.pipWindow && createPortal(
+        <div className="timer-panel">
+          <TimerBody t={t} timer={timer} projects={projects} hasV4Schema={hasV4Schema} compact />
+        </div>,
+        pip.pipWindow.document.body,
+      )}
       <p className="timer-note">{t.timerLocalNote}</p>
     </div>
   );

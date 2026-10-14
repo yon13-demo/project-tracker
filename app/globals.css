@@ -293,6 +293,12 @@ p { margin: 0; color: var(--muted); }
 .timer-away-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .timer-away-actions select { flex: 1; min-width: 140px; }
 
+/* Mini window (Document Picture-in-Picture) */
+.pip-body { margin: 0; padding: 10px; background: var(--bg); }
+.pip-body .timer-panel { margin: 0; padding: 12px; box-shadow: none; }
+.timer-mini .timer-clock { font-size: 28px; }
+.timer-mini .timer-list { max-height: 180px; overflow-y: auto; }
+
 /* ─── Badges ─────────────────────────────────────────────────────────────── */
 .code-badge {
   display: inline-flex;
