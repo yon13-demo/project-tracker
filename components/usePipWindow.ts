@@ -35,7 +35,7 @@ export function usePipWindow() {
   const open = useCallback(async () => {
     const api = (window as unknown as { documentPictureInPicture?: DocumentPip }).documentPictureInPicture;
     if (!api) return;
-    const win = await api.requestWindow({ width: 320, height: 420 });
+    const win = await api.requestWindow({ width: 340, height: 130 });
     win.document.title = 'Weave';
     copyStyles(document, win.document);
     syncTheme(win);
@@ -53,5 +53,10 @@ export function usePipWindow() {
 
   const close = useCallback(() => { pipWindow?.close(); }, [pipWindow]);
 
-  return { supported, pipWindow, open, close };
+  // Needs a user click (browser rule); harmless if refused.
+  const resize = useCallback((width: number, height: number) => {
+    try { pipWindow?.resizeTo(width, height); } catch { /* not allowed without a click */ }
+  }, [pipWindow]);
+
+  return { supported, pipWindow, open, close, resize };
 }

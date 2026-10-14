@@ -226,8 +226,8 @@ p { margin: 0; color: var(--muted); }
 .worklog-entries .btn-remove-entry { position: absolute; top: 8px; right: 8px; }
 .worklog-submit { width: 100%; justify-content: center; min-height: 42px; margin-top: 4px; }
 .worklog-list-header {
-  width: 100%; display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 0 4px; background: none; border: none;
+  width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 12px 0 4px; background: none; border: none;
 }
 .worklog-count { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
 .chevron-up { transform: rotate(180deg); }
@@ -236,9 +236,41 @@ p { margin: 0; color: var(--muted); }
 :root[data-theme="dark"] .worklog-card.is-today { background: var(--line2); }
 .worklog-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .worklog-card-title { font-size: 15px; color: var(--ink); }
-.worklog-card-date { margin-top: 2px; font-size: 14px; color: var(--ink2); }
-.worklog-card-detail { margin-top: 4px; font-size: 13px; color: var(--muted); }
-.worklog-card-meta { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.worklog-card-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.worklog-card-links { margin-left: auto; }
+.worklog-lines { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
+.worklog-lines li { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: var(--ink2); }
+.worklog-line-label { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.worklog-line-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.worklog-line-hours { flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Desktop: input on the left, "Pencatatan saya" on the right */
+.worklog-layout { display: grid; gap: 24px; }
+.worklog-side { padding: 4px 16px 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+@media (min-width: 900px) {
+  .worklog-layout { grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); align-items: start; }
+  .worklog-layout .worklog-column { max-width: none; }
+  .worklog-side { position: sticky; top: 16px; }
+}
+.worklog-list-tools { display: flex; align-items: center; gap: 6px; }
+.segmented { display: inline-flex; padding: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; }
+.segmented button { padding: 4px 10px; border: none; border-radius: 999px; background: none; color: var(--muted); font-size: 12px; font-weight: 600; }
+.segmented button.active { background: var(--card); color: var(--brand); box-shadow: var(--shadow); }
+.project-group { border-bottom: 1px solid var(--line); }
+.project-group-head {
+  width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 12px 0; background: none; border: none; color: var(--ink); font-weight: 600; text-align: left;
+}
+.project-group-total { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.project-group-days { margin: 0 0 12px 4px; padding-left: 12px; border-left: 2px solid var(--brand-border); }
+.worklog-form-actions { display: flex; gap: 8px; margin-top: 4px; }
+.worklog-form-actions .btn-secondary { justify-content: center; min-height: 42px; }
+.worklog-form-actions .worklog-submit { flex: 1; width: auto; margin-top: 0; }
+.dev-badge {
+  display: inline-flex; margin-left: 6px; padding: 1px 7px; vertical-align: middle;
+  border: 1px solid #fde68a; border-radius: 999px; background: var(--warn-soft); color: var(--warn);
+  font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: none;
+}
 .worklog-empty { padding: 16px 0; font-size: 13px; }
 .link-button { padding: 0; background: none; border: none; color: var(--brand); font-size: 12px; text-decoration: underline; }
 .manual-tag { margin-left: 6px; }
@@ -298,6 +330,20 @@ p { margin: 0; color: var(--muted); }
 .pip-body .timer-panel { margin: 0; padding: 12px; box-shadow: none; }
 .timer-mini .timer-clock { font-size: 28px; }
 .timer-mini .timer-list { max-height: 180px; overflow-y: auto; }
+.pip-body .timer-panel { position: relative; }
+.mini-collapse { position: absolute; top: 8px; right: 8px; }
+.mini-player-wrap { display: grid; gap: 8px; }
+.mini-player { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.mini-play {
+  width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center;
+  border: none; border-radius: 50%; background: var(--brand); color: #fff; box-shadow: 0 2px 8px #4f46e540;
+}
+.mini-play.is-running { background: var(--brand-dark); }
+.mini-play:disabled { opacity: .5; cursor: not-allowed; }
+.mini-info { flex: 1; min-width: 0; }
+.mini-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; color: var(--ink); }
+.mini-clock { font-size: 20px; font-weight: 700; letter-spacing: -.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.mini-clock span { font-size: 11px; font-weight: 500; letter-spacing: 0; color: var(--muted); }
 
 /* Review & send */
 .review-list { display: grid; gap: 10px; margin: 12px 0; }
