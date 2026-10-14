@@ -101,3 +101,31 @@ export function workLogToExistingEntry(w: WorkLog): ExistingEntry {
     description, hours: w.hours || 0, label, code: logProjectCode(w),
   };
 }
+
+export type ProjectDay = { date: string; hours: number; description: string };
+export type ProjectGroup = { key: string; label: string; code: string; category: WorkCategory; totalHours: number; days: ProjectDay[] };
+
+// "Per proyek" view: one group per project / quotation / training, the days spent on it newest first.
+export function groupLogsByProject(logs: WorkLog[]): ProjectGroup[] {
+  const groups = new Map<string, ProjectGroup>();
+  for (const w of logs) {
+    if (w.is_leave) continue;
+    const e = workLogToExistingEntry(w);
+    const key = e.category === 'project'
+      ? e.project_id ?? `manual:${e.custom_name.toLowerCase()}`
+      : `${e.category}:${e.description.toLowerCase()}`;
+    const group = groups.get(key) ?? { key, label: e.label, code: e.code, category: e.category, totalHours: 0, days: [] };
+    const day = group.days.find(d => d.date === w.log_date);
+    if (day) {
+      day.hours += e.hours;
+      if (e.description && e.category === 'project') day.description = [day.description, e.description].filter(Boolean).join('; ');
+    } else {
+      group.days.push({ date: w.log_date, hours: e.hours, description: e.category === 'project' ? e.description : '' });
+    }
+    group.totalHours += e.hours;
+    groups.set(key, group);
+  }
+  const list = [...groups.values()];
+  for (const g of list) g.days.sort((a, b) => b.date.localeCompare(a.date));
+  return list.sort((a, b) => b.days[0].date.localeCompare(a.days[0].date));
+}

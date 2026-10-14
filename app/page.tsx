@@ -11,7 +11,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { showAlert, showStatus, registerNotifiers } from '@/lib/notify';
 import {
-  CATEGORY_LABEL, draftToEntry, isDraftReady, isManualProject, logProjectCode, logProjectName, newEntryDraft, saveDay,
+  CATEGORY_LABEL, draftToEntry, groupLogsByProject, isDraftReady, isManualProject, logProjectCode, logProjectName, newEntryDraft, saveDay,
   type EntryDraft, type Project, type WorkCategory, type WorkLog,
 } from '@/lib/worklog';
 import { EntryFields } from '@/components/EntryFields';
@@ -95,6 +95,8 @@ const text = {
     reviewTitle: 'Periksa & kirim', tracked: 'Timer', alreadyLogged: 'Sudah tercatat',
     backToTimer: 'Kembali ke timer', send: 'Kirim', daySent: 'Hari terkirim.', reviewTotal: 'Total jam',
     reviewZeroHint: 'Baris 0 jam tidak disimpan.',
+    inDevelopment: 'Dalam pengembangan', expand: 'Buka', collapse: 'Ciutkan',
+    viewByDay: 'Per hari', viewByProject: 'Per proyek', daysCount: 'hari', totalLabel: 'Total',
     reviewLeaveNotice: 'Tanggal ini tercatat sebagai cuti. Mengirim akan mengganti cuti dengan jam kerja ini.',
   },
   en: {
@@ -157,6 +159,8 @@ const text = {
     reviewTitle: 'Review & send', tracked: 'Timer', alreadyLogged: 'Already logged',
     backToTimer: 'Back to timer', send: 'Send', daySent: 'Day sent.', reviewTotal: 'Total hours',
     reviewZeroHint: 'Rows with 0 hours are not saved.',
+    inDevelopment: 'In development', expand: 'Expand', collapse: 'Collapse',
+    viewByDay: 'By day', viewByProject: 'By project', daysCount: 'days', totalLabel: 'Total',
     reviewLeaveNotice: 'This date is marked as leave. Sending will replace the leave with these work hours.',
   }
 } as const;
@@ -939,6 +943,9 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
 
   const [formOpen, setFormOpen] = useState(false);
   const [listOpen, setListOpen] = useState(true);
+  const [listView, setListView] = useState<'day' | 'project'>('day');
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
+  const projectGroups = useMemo(() => groupLogsByProject(workLogs), [workLogs]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [saving, setSaving] = useState(false);
   const [dateEntries, setDateEntries] = useState<EntryDraft[]>([newEntryDraft()]);
@@ -1030,6 +1037,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
         <h1>{t.welcome}, <span className="user-name">{profile.full_name}</span></h1>
       </div>
 
+      <div className="worklog-layout">
       <div className="worklog-column">
         <DayTimerPanel t={t} lang={lang} userId={profile.id} projects={projects} hasV4Schema={hasV4Schema}
           workLogs={workLogs} logsLoaded={logsLoaded} onSent={onRefresh} />
@@ -1042,7 +1050,6 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
           <div className="worklog-form">
             <div className="worklog-form-header">
               <span className="worklog-section-label">{t.logWork}</span>
-              <button className="btn-secondary" onClick={() => setFormOpen(false)}>{t.close}</button>
             </div>
 
             <div className="field">
@@ -1077,18 +1084,32 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
               </div>
             )}
 
-            <button className="btn-primary worklog-submit" onClick={handleSubmit} disabled={!canSubmit}>
-              {saving ? '…' : t.save}
-            </button>
+            <div className="worklog-form-actions">
+              <button className="btn-secondary" onClick={() => setFormOpen(false)} disabled={saving}>{t.cancel}</button>
+              <button className="btn-primary worklog-submit" onClick={handleSubmit} disabled={!canSubmit}>
+                {saving ? '…' : t.save}
+              </button>
+            </div>
           </div>
         )}
+      </div>
 
-        <button className="worklog-list-header" onClick={() => setListOpen(o => !o)}>
-          <span className="worklog-section-label">{t.myLogs}</span>
-          <span className="worklog-count">{loggedDates.length} <ChevronDown size={14} className={listOpen ? 'chevron-up' : ''} /></span>
-        </button>
+      <aside className="worklog-side">
 
-        {listOpen && (
+        <div className="worklog-list-header">
+          <span className="worklog-section-label">{t.myLogs} <span className="worklog-count">{loggedDates.length}</span></span>
+          <div className="worklog-list-tools">
+            <div className="segmented" role="tablist">
+              <button role="tab" aria-selected={listView === 'day'} className={listView === 'day' ? 'active' : ''} onClick={() => setListView('day')}>{t.viewByDay}</button>
+              <button role="tab" aria-selected={listView === 'project'} className={listView === 'project' ? 'active' : ''} onClick={() => setListView('project')}>{t.viewByProject}</button>
+            </div>
+            <button className="btn-ghost-icon" onClick={() => setListOpen(o => !o)} title={listOpen ? t.collapse : t.expand}>
+              <ChevronDown size={16} className={listOpen ? 'chevron-up' : ''} />
+            </button>
+          </div>
+        </div>
+
+        {listOpen && listView === 'day' && (
           <div className="worklog-list">
             {!loggedDates.length && <p className="worklog-empty">{t.noLogs}</p>}
             {loggedDates.map(date => {
@@ -1099,35 +1120,71 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
               return (
                 <div key={date} className={`worklog-card${date === todayStr() ? ' is-today' : ''}`}>
                   <div className="worklog-card-top">
-                    <strong className="worklog-card-title">
-                      {day.isLeave ? t.leaveDay : day.entries.map(entryLabel).join(', ')}
-                    </strong>
+                    <strong className="worklog-card-title">{formatCardDate(date, lang)}</strong>
                     {day.isLeave
                       ? <span className="badge-leave">{t.leaveDay}</span>
                       : hasManual
                         ? <span className="hours-badge warn">{t.manual}</span>
                         : <span className="hours-badge">{t.logged}</span>}
                   </div>
-                  <div className="worklog-card-date">
-                    {formatCardDate(date, lang)}{!day.isLeave && ` · ${total} jam`}
-                  </div>
                   {!day.isLeave && (
-                    <div className="worklog-card-detail">
-                      {day.entries.map(e => `${e.category === 'project' ? (e.project_code || e.project_name) : CATEGORY_LABEL[e.category]} · ${e.hours} jam`).join(', ')}
-                    </div>
+                    <ul className="worklog-lines">
+                      {day.entries.map((e, i) => (
+                        <li key={i}>
+                          <span className="worklog-line-label">{entryLabel(e)}{e.category === 'project' && e.project_code && <span className="code-badge">{e.project_code}</span>}</span>
+                          <span className="worklog-line-hours">{e.hours} jam</span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                  {editable && (
-                    <div className="worklog-card-meta">
-                      <button className="link-button" onClick={() => openForm(date)}>{t.edit}</button>
-                      {' · '}
-                      <button className="link-button" onClick={() => handleDeleteDate(date)} disabled={saving}>{t.delete}</button>
-                    </div>
+                  <div className="worklog-card-meta">
+                    {!day.isLeave && <span>{t.totalLabel}: {total} jam</span>}
+                    {editable && (
+                      <span className="worklog-card-links">
+                        <button className="link-button" onClick={() => openForm(date)}>{t.edit}</button>
+                        {' · '}
+                        <button className="link-button" onClick={() => handleDeleteDate(date)} disabled={saving}>{t.delete}</button>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {listOpen && listView === 'project' && (
+          <div className="worklog-list">
+            {!projectGroups.length && <p className="worklog-empty">{t.noLogs}</p>}
+            {projectGroups.map(g => {
+              const open = openGroups.includes(g.key);
+              return (
+                <div key={g.key} className="project-group">
+                  <button className="project-group-head" aria-expanded={open}
+                    onClick={() => setOpenGroups(prev => (open ? prev.filter(k => k !== g.key) : [...prev, g.key]))}>
+                    <span className="worklog-line-label">{g.label}{g.code && <span className="code-badge">{g.code}</span>}</span>
+                    <span className="project-group-total">{g.totalHours} jam · {g.days.length} {t.daysCount}
+                      <ChevronDown size={14} className={open ? 'chevron-up' : ''} /></span>
+                  </button>
+                  {open && (
+                    <ul className="worklog-lines project-group-days">
+                      {g.days.map(d => (
+                        <li key={d.date}>
+                          {days.includes(d.date)
+                            ? <button className="link-button" onClick={() => openForm(d.date)}>{formatCardDate(d.date, lang)}</button>
+                            : <span>{formatCardDate(d.date, lang)}</span>}
+                          {d.description && <span className="worklog-line-desc">{d.description}</span>}
+                          <span className="worklog-line-hours">{d.hours} jam</span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               );
             })}
           </div>
         )}
+      </aside>
       </div>
     </div>
   );
