@@ -92,6 +92,9 @@ const text = {
     noTimerItems: 'Belum ada item. Tambahkan proyek untuk mulai.',
     awayMessage: 'Kamu tidak aktif {min} menit saat {item} berjalan.',
     awayKeep: 'Tetap di {item}', awayMove: 'Pindah ke item lain…', awayDiscard: 'Buang', awayMoveTo: 'Pindahkan',
+    reviewTitle: 'Periksa & kirim', tracked: 'Timer', alreadyLogged: 'Sudah tercatat',
+    backToTimer: 'Kembali ke timer', send: 'Kirim', daySent: 'Hari terkirim.', reviewTotal: 'Total jam',
+    reviewZeroHint: 'Baris 0 jam tidak disimpan.',
   },
   en: {
     app: 'Weave', login: 'Sign in', email: 'Email', password: 'Password',
@@ -150,6 +153,9 @@ const text = {
     noTimerItems: 'No items yet. Add a project to start.',
     awayMessage: 'You were away {min} min while {item} was running.',
     awayKeep: 'Keep on {item}', awayMove: 'Move to another item…', awayDiscard: 'Discard', awayMoveTo: 'Move',
+    reviewTitle: 'Review & send', tracked: 'Timer', alreadyLogged: 'Already logged',
+    backToTimer: 'Back to timer', send: 'Send', daySent: 'Day sent.', reviewTotal: 'Total hours',
+    reviewZeroHint: 'Rows with 0 hours are not saved.',
   }
 } as const;
 

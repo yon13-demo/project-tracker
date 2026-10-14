@@ -5,7 +5,8 @@ import { ExternalLink } from 'lucide-react';
 import { useDayTimer } from './useDayTimer';
 import { usePipWindow } from './usePipWindow';
 import { TimerBody } from './TimerBody';
-import type { Project, WorkLog } from '@/lib/worklog';
+import { DayReview } from './DayReview';
+import { workLogToExistingEntry, type Project, type WorkLog } from '@/lib/worklog';
 
 export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs, onSent }: {
   t: any; lang: 'id' | 'en'; userId: string; projects: Project[]; hasV4Schema: boolean; workLogs: WorkLog[]; onSent: () => void;
@@ -24,6 +25,16 @@ export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs
         <span className="worklog-cta-title">{t.startDay}</span>
         <span className="worklog-cta-sub">{t.startDaySub}</span>
       </button>
+    );
+  }
+
+  if (state.status === 'review') {
+    const existing = workLogs.filter(w => w.log_date === state.date && !w.is_leave).map(workLogToExistingEntry);
+    return (
+      <>
+        {timer.staleNotice && <p className="timer-stale">{t.timerStaleDay.replace('{date}', timer.staleNotice)}</p>}
+        <DayReview t={t} timer={timer} existing={existing} hasV4Schema={hasV4Schema} onSent={onSent} />
+      </>
     );
   }
 
