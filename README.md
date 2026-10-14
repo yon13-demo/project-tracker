@@ -12,6 +12,7 @@ Aplikasi ringan Next.js untuk Vercel dengan dua peran: **admin** dan **user**, s
 - Login dapat dikonfigurasi sebagai password, Microsoft, atau keduanya.
 - Admin dapat mengurutkan rekapan berdasarkan nama atau Project ID, melihat jam pencatatan, serta mengelola proyek dan user.
 - Supabase Auth untuk akun dan Supabase Postgres untuk data.
+- Timer harian: mulai hari, pindah antar proyek/quotation/training, pause, deteksi tidak aktif, jendela mini yang selalu di atas (Edge), lalu periksa dan kirim di akhir hari. Data timer tersimpan di PC sampai dikirim. Aplikasi dapat di-install sebagai app (PWA) dari Edge.
 - Vercel Cron harian menjalankan query aman agar proyek Supabase Free tetap aktif.
 
 ## Menjalankan dan deploy

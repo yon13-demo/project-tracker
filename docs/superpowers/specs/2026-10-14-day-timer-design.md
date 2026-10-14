@@ -104,8 +104,9 @@ type DayTimerState = {
 - **App closed / crash / restart / sleep:** state is reloaded from storage; the gap is handled
   by away detection (section 3).
 - **Mini window and main window:** same React tree and state (PiP renders a portal), no sync needed.
-- **Second tab:** uses a `BroadcastChannel` + storage event; a tab that is not the owner shows
-  "Timer berjalan di jendela lain" instead of starting a competing timer.
+- **Second tab:** a small owner lock in `localStorage` (`weave.dayTimer.owner`, refreshed every
+  heartbeat, stale after 60 s) makes one tab the owner; other tabs show
+  "Timer sedang berjalan di jendela lain" instead of starting a competing timer.
 - **Past midnight:** time stays on the start date.
 - **Clearing Edge site data** erases an unsent day. The panel shows a short reminder to send
   daily; sent data is safe in the database.
