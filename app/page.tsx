@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Image from 'next/image';
 import {
   Globe2, KeyRound, LogOut, Pencil, Plus, Trash2, UserPlus, Users,
@@ -877,6 +877,15 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
   const [dateEntries, setDateEntries] = useState<EntryDraft[]>([newEntryDraft()]);
   const [isLeaveMode, setIsLeaveMode] = useState(false);
   const [changePassOpen, setChangePassOpen] = useState(false);
+  const addEntryRef = useRef<HTMLButtonElement>(null);
+  const [addedEntryId, setAddedEntryId] = useState<string | null>(null);
+
+  // After "Tambah Proyek", bring the new row into view and put the cursor in its project field.
+  useEffect(() => {
+    if (!addedEntryId) return;
+    addEntryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.querySelector<HTMLInputElement>(`[data-entry-id="${addedEntryId}"] .combobox input`)?.focus({ preventScroll: true });
+  }, [addedEntryId]);
 
   async function handleChangePassword(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -921,7 +930,9 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
   }
 
   function addEntry() {
-    setDateEntries(prev => [...prev, newEntryDraft()]);
+    const entry = newEntryDraft();
+    setDateEntries(prev => [...prev, entry]);
+    setAddedEntryId(entry.tempId);
   }
 
   function updateEntry(tempId: string, patch: Partial<EntryDraft>) {
@@ -1037,7 +1048,7 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
             {!isLeaveMode && (
               <div className="worklog-entries">
                 {dateEntries.map(entry => (
-                  <div key={entry.tempId} className="entry-row">
+                  <div key={entry.tempId} className="entry-row" data-entry-id={entry.tempId}>
                     <div className="entry-row-fields">
                       <div className="entry-field">
                         <label>{t.namaProyek} / {t.nomorProyek}</label>
@@ -1071,7 +1082,7 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
                     )}
                   </div>
                 ))}
-                <button className="btn-add-entry" onClick={addEntry}>
+                <button ref={addEntryRef} className="btn-add-entry" onClick={addEntry}>
                   <Plus size={14} /> {t.addProject}
                 </button>
               </div>
