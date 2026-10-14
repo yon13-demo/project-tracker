@@ -18,10 +18,12 @@ type WorkLog = {
   id: string; user_id: string; log_date: string;
   project_id: string | null; hours: number | null; is_leave: boolean;
   custom_project_name?: string | null; custom_project_code?: string | null;
+  category?: WorkCategory; description?: string | null;
   profiles?: { full_name: string };
   projects?: { name: string; project_code: string } | null;
 };
-type DayEntry = { project_id: string | null; project_name: string; project_code: string; hours: number; manual: boolean };
+type WorkCategory = 'project' | 'quotation' | 'training';
+type DayEntry = { project_id: string | null; project_name: string; project_code: string; hours: number; manual: boolean; category: WorkCategory; description: string };
 type AdminLog = {
   id: string; action: string; details: any; created_at: string;
   admin?: { full_name: string } | null;
@@ -95,6 +97,8 @@ const text = {
     jenis: 'Jenis', kerja: 'Kerja', close: 'Tutup', manual: 'Manual', logged: 'Tercatat',
     useManual: 'Gunakan', manualCode: 'Kode proyek (opsional)', noProjectMatch: 'Proyek tidak ditemukan',
     replaceHint: 'Tanggal ini sudah tercatat. Menyimpan akan mengganti pencatatan sebelumnya.', noLogs: 'Belum ada pencatatan',
+    kategori: 'Kategori', deskripsi: 'Deskripsi (opsional)', deskripsiHeader: 'Deskripsi',
+    descQuotation: 'Nama proyek quotation', descTraining: 'Topik training',
   },
   en: {
     app: 'Weave', login: 'Sign in', email: 'Email', password: 'Password',
@@ -142,6 +146,8 @@ const text = {
     jenis: 'Type', kerja: 'Work', close: 'Close', manual: 'Manual', logged: 'Logged',
     useManual: 'Use', manualCode: 'Project code (optional)', noProjectMatch: 'No matching project',
     replaceHint: 'This date already has entries. Saving will replace them.', noLogs: 'No entries yet',
+    kategori: 'Category', deskripsi: 'Description (optional)', deskripsiHeader: 'Description',
+    descQuotation: 'Quotation project name', descTraining: 'Training topic',
   }
 } as const;
 
@@ -155,7 +161,10 @@ function getLast45Days(): string[] {
   }
   return days;
 }
+const WORK_CATEGORIES: WorkCategory[] = ['project', 'quotation', 'training'];
+const CATEGORY_LABEL: Record<WorkCategory, string> = { project: 'Project', quotation: 'Quotation', training: 'Training' };
 function logProjectName(w: WorkLog) { return w.projects?.name || w.custom_project_name || ''; }
+function isManualProject(w: WorkLog) { return (w.category || 'project') === 'project' && !w.project_id; }
 function logProjectCode(w: WorkLog) { return w.projects?.project_code || w.custom_project_code || ''; }
 function getMonthKey(date = new Date()) { return date.toISOString().slice(0, 7); }
 function getExportMonths() {
@@ -214,7 +223,7 @@ export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
-  const [manualProjects, setManualProjects] = useState(false);
+  const [hasV4Schema, setHasV4Schema] = useState(false);
   const [changePassOpen, setChangePassOpen] = useState(false);
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -317,9 +326,9 @@ export default function Home() {
 
     const logColumns = 'id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)';
     const loadLogs = async () => {
-      // custom_project_* columns exist only after supabase/schema-v4-manual-project.sql has been run.
-      const withManual = await supabase.from('work_logs').select(`${logColumns},custom_project_name,custom_project_code`).order('log_date', { ascending: false });
-      setManualProjects(!withManual.error);
+      // These columns exist only after supabase/schema-v4-worklog-entries.sql has been run.
+      const withManual = await supabase.from('work_logs').select(`${logColumns},custom_project_name,custom_project_code,category,description`).order('log_date', { ascending: false });
+      setHasV4Schema(!withManual.error);
       if (!withManual.error) return withManual;
       return supabase.from('work_logs').select(logColumns).order('log_date', { ascending: false });
     };
@@ -531,7 +540,7 @@ export default function Home() {
       if (period !== 'all' && !wl.log_date.startsWith(period)) return false;
       if (fromDate && wl.log_date < fromDate) return false;
       if (toDate && wl.log_date > toDate) return false;
-      const key = `${wl.profiles?.full_name} ${logProjectName(wl)} ${logProjectCode(wl)}`.toLowerCase();
+      const key = `${wl.profiles?.full_name} ${logProjectName(wl)} ${logProjectCode(wl)} ${wl.category || ''} ${wl.description || ''}`.toLowerCase();
       return key.includes(query.toLowerCase());
     });
 
@@ -540,22 +549,26 @@ export default function Home() {
 
     sheet.columns = [
       { header: t.user, key: 'user', width: 22 },
+      { header: t.kategori, key: 'category', width: 14 },
       { header: t.namaProyek, key: 'project', width: 24 },
       { header: t.nomorProyek, key: 'code', width: 18 },
       { header: t.tanggal, key: 'date', width: 14 },
       { header: t.jamKerja, key: 'hours', width: 12 },
       { header: t.leave, key: 'leave', width: 12 },
+      { header: t.deskripsiHeader, key: 'description', width: 32 },
     ];
     sheet.getRow(1).font = { bold: true };
 
     rows.forEach(r => {
       const row = sheet.addRow({
         user: r.profiles?.full_name || '',
+        category: r.is_leave ? '' : CATEGORY_LABEL[r.category || 'project'],
         project: logProjectName(r),
         code: logProjectCode(r),
         date: r.log_date,
         hours: r.is_leave ? '' : (r.hours ?? 0),
         leave: r.is_leave ? t.leave : '',
+        description: r.description || '',
       });
       if (r.is_leave) {
         row.getCell('leave').font = { color: { argb: 'FFFF0000' } };
@@ -642,7 +655,7 @@ export default function Home() {
           currentProfile={profile}
         />
       ) : (
-        <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} manualProjects={manualProjects} onRefresh={load} />
+        <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} hasV4Schema={hasV4Schema} onRefresh={load} />
       )}
 
       {changePassOpen && <ChangePasswordModal t={t} lang={lang} onClose={() => setChangePassOpen(false)} />}
@@ -881,10 +894,15 @@ function ChangePasswordModal({ t, lang, onClose }: { t: any; lang: Lang; onClose
   );
 }
 
-type EntryDraft = { tempId: string; project_id: string; custom_name: string; custom_code: string; query: string; hours: string };
+type EntryDraft = { tempId: string; category: WorkCategory; description: string; project_id: string; custom_name: string; custom_code: string; query: string; hours: string };
 
 function newEntryDraft(): EntryDraft {
-  return { tempId: crypto.randomUUID(), project_id: '', custom_name: '', custom_code: '', query: '', hours: '' };
+  return { tempId: crypto.randomUUID(), category: 'project', description: '', project_id: '', custom_name: '', custom_code: '', query: '', hours: '' };
+}
+
+function entryLabel(e: DayEntry) {
+  if (e.category === 'project') return e.project_name;
+  return e.description ? `${CATEGORY_LABEL[e.category]}: ${e.description}` : CATEGORY_LABEL[e.category];
 }
 
 function formatCardDate(dateStr: string, lang: Lang): string {
@@ -894,8 +912,8 @@ function formatCardDate(dateStr: string, lang: Lang): string {
   return formatted;
 }
 
-function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefresh }: {
-  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; manualProjects: boolean; onRefresh: () => void;
+function UserView({ t, lang, profile, projects, workLogs, hasV4Schema, onRefresh }: {
+  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; hasV4Schema: boolean; onRefresh: () => void;
 }) {
   const days = getLast45Days();
   const logsByDate = useMemo(() => {
@@ -904,13 +922,15 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
       if (!map[wl.log_date]) map[wl.log_date] = { isLeave: false, entries: [] };
       if (wl.is_leave) {
         map[wl.log_date].isLeave = true;
-      } else if (wl.project_id || wl.custom_project_name) {
+      } else if (wl.project_id || wl.custom_project_name || (wl.category && wl.category !== 'project')) {
         map[wl.log_date].entries.push({
           project_id: wl.project_id,
           project_name: logProjectName(wl),
           project_code: logProjectCode(wl),
           hours: wl.hours || 0,
-          manual: !wl.project_id
+          manual: isManualProject(wl),
+          category: wl.category || 'project',
+          description: wl.description || ''
         });
       }
     }
@@ -947,10 +967,12 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
     setIsLeaveMode(Boolean(existing?.isLeave));
     const entries = (existing?.entries || []).map(e => ({
       ...newEntryDraft(),
+      category: e.category,
+      description: e.description,
       project_id: e.project_id || '',
       custom_name: e.manual ? e.project_name : '',
       custom_code: e.manual ? e.project_code : '',
-      query: e.manual ? e.project_name : `${e.project_name} — ${e.project_code}`,
+      query: e.category !== 'project' ? '' : e.manual ? e.project_name : `${e.project_name} — ${e.project_code}`,
       hours: String(e.hours)
     }));
     setDateEntries(entries.length ? entries : [newEntryDraft()]);
@@ -978,7 +1000,7 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
   }
 
   const entriesValid = dateEntries.every(e =>
-    (e.project_id || e.custom_name.trim()) && e.hours && !isNaN(Number(e.hours)) && Number(e.hours) > 0
+    (e.category !== 'project' || e.project_id || e.custom_name.trim()) && e.hours && !isNaN(Number(e.hours)) && Number(e.hours) > 0
   );
   const canSubmit = !saving && Boolean(selectedDate) && (isLeaveMode || entriesValid);
 
@@ -995,7 +1017,7 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
     if (!selectedDate) return;
     if (isLeaveMode) return handleMarkLeave();
     for (const e of dateEntries) {
-      if (!e.project_id && !e.custom_name.trim()) { showAlert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
+      if (e.category === 'project' && !e.project_id && !e.custom_name.trim()) { showAlert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
       if (!e.hours || isNaN(Number(e.hours)) || Number(e.hours) <= 0) {
         showAlert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return;
       }
@@ -1004,9 +1026,12 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
     await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', selectedDate);
     const inserts = dateEntries.map(e => ({
       user_id: profile.id, log_date: selectedDate, hours: Number(e.hours), is_leave: false,
-      ...(e.project_id
-        ? { project_id: e.project_id }
-        : { project_id: null, custom_project_name: e.custom_name.trim(), custom_project_code: e.custom_code.trim() || null })
+      ...(hasV4Schema ? { category: e.category, description: e.description.trim() || null } : {}),
+      ...(e.category !== 'project'
+        ? { project_id: null }
+        : e.project_id
+          ? { project_id: e.project_id }
+          : { project_id: null, custom_project_name: e.custom_name.trim(), custom_project_code: e.custom_code.trim() || null })
     }));
     const { error } = await supabase.from('work_logs').insert(inserts);
     setSaving(false);
@@ -1053,16 +1078,35 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
                 {dateEntries.map(entry => (
                   <div key={entry.tempId} className="entry-row" data-entry-id={entry.tempId}>
                     <div className="entry-row-fields">
-                      <div className="entry-field">
-                        <label>{t.namaProyek} / {t.nomorProyek}</label>
-                        <ProjectCombobox t={t} entry={entry} projects={projects} allowManual={manualProjects}
-                          onChange={patch => updateEntry(entry.tempId, patch)} />
-                      </div>
-                      {!entry.project_id && entry.custom_name && (
+                      {hasV4Schema && (
+                        <div className="entry-field">
+                          <label>{t.kategori}</label>
+                          <select className="field-input" value={entry.category}
+                            onChange={e => updateEntry(entry.tempId, { category: e.target.value as WorkCategory, project_id: '', custom_name: '', custom_code: '', query: '' })}>
+                            {WORK_CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
+                          </select>
+                        </div>
+                      )}
+                      {entry.category === 'project' && (
+                        <div className="entry-field">
+                          <label>{t.namaProyek} / {t.nomorProyek}</label>
+                          <ProjectCombobox t={t} entry={entry} projects={projects} allowManual={hasV4Schema}
+                            onChange={patch => updateEntry(entry.tempId, patch)} />
+                        </div>
+                      )}
+                      {entry.category === 'project' && !entry.project_id && entry.custom_name && (
                         <div className="entry-field">
                           <label>{t.manualCode}</label>
                           <input className="field-input" value={entry.custom_code}
                             onChange={e => updateEntry(entry.tempId, { custom_code: e.target.value })} />
+                        </div>
+                      )}
+                      {hasV4Schema && (
+                        <div className="entry-field">
+                          <label>{t.deskripsi}</label>
+                          <input className="field-input" value={entry.description}
+                            placeholder={entry.category === 'quotation' ? t.descQuotation : entry.category === 'training' ? t.descTraining : ''}
+                            onChange={e => updateEntry(entry.tempId, { description: e.target.value })} />
                         </div>
                       )}
                       <div className="entry-field entry-field-hours">
@@ -1114,7 +1158,7 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
                 <div key={date} className={`worklog-card${date === todayStr() ? ' is-today' : ''}`}>
                   <div className="worklog-card-top">
                     <strong className="worklog-card-title">
-                      {day.isLeave ? t.leaveDay : day.entries.map(e => e.project_name).join(', ')}
+                      {day.isLeave ? t.leaveDay : day.entries.map(entryLabel).join(', ')}
                     </strong>
                     {day.isLeave
                       ? <span className="badge-leave">{t.leaveDay}</span>
@@ -1127,7 +1171,7 @@ function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefr
                   </div>
                   {!day.isLeave && (
                     <div className="worklog-card-detail">
-                      {day.entries.map(e => `${e.project_code || e.project_name} · ${e.hours} jam`).join(', ')}
+                      {day.entries.map(e => `${e.category === 'project' ? (e.project_code || e.project_name) : CATEGORY_LABEL[e.category]} · ${e.hours} jam`).join(', ')}
                     </div>
                   )}
                   {editable && (
@@ -1249,7 +1293,7 @@ function AdminView({
       .filter((w: WorkLog) => !fromDate || w.log_date >= fromDate)
       .filter((w: WorkLog) => !toDate || w.log_date <= toDate)
       .filter((w: WorkLog) => {
-        const key = `${w.profiles?.full_name} ${logProjectName(w)} ${logProjectCode(w)}`.toLowerCase();
+        const key = `${w.profiles?.full_name} ${logProjectName(w)} ${logProjectCode(w)} ${w.category || ''} ${w.description || ''}`.toLowerCase();
         return key.includes(query.toLowerCase());
       })
       .sort((a: WorkLog, b: WorkLog) => {
@@ -1370,8 +1414,10 @@ function AdminView({
             <thead>
               <tr>
                 <th>{t.user}</th>
+                <th>{t.kategori}</th>
                 <th>{t.namaProyek}</th>
                 <th>{t.nomorProyek}</th>
+                <th>{t.deskripsiHeader}</th>
                 <th>{t.tanggal}</th>
                 <th>{t.jamKerjaHeader}</th>
               </tr>
@@ -1380,13 +1426,15 @@ function AdminView({
               {records.map((r: WorkLog) => (
                 <tr key={r.id}>
                   <td>{r.profiles?.full_name}</td>
-                  <td>{logProjectName(r)}{!r.project_id && <span className="hours-badge warn manual-tag">{t.manual}</span>}</td>
+                  <td>{CATEGORY_LABEL[r.category || 'project']}</td>
+                  <td>{logProjectName(r) || <span className="code-placeholder">—</span>}{isManualProject(r) && <span className="hours-badge warn manual-tag">{t.manual}</span>}</td>
                   <td>{logProjectCode(r) ? <span className="code-badge">{logProjectCode(r)}</span> : <span className="code-placeholder">—</span>}</td>
+                  <td className="td-desc">{r.description || <span className="code-placeholder">—</span>}</td>
                   <td>{r.log_date}</td>
                   <td><span className="hours-badge">{r.hours} jam</span></td>
                 </tr>
               ))}
-              {!records.length && <tr><td colSpan={5} className="td-empty">{t.noData}</td></tr>}
+              {!records.length && <tr><td colSpan={7} className="td-empty">{t.noData}</td></tr>}
             </tbody>
           </table>
         </div>
