@@ -16,7 +16,7 @@ Aplikasi ringan Next.js untuk Vercel dengan dua peran: **admin** dan **user**, s
 
 ## Menjalankan dan deploy
 
-1. Buat project baru di [Supabase](https://supabase.com), kemudian jalankan isi `supabase/schema.sql` pada SQL Editor. Untuk project yang sudah memakai schema v2, jalankan `supabase/schema-v3-migration.sql`.
+1. Buat project baru di [Supabase](https://supabase.com), kemudian jalankan isi `supabase/schema.sql` pada SQL Editor. Untuk project yang sudah memakai schema v2, jalankan `supabase/schema-v3-migration.sql`. Untuk mengaktifkan input proyek manual, jalankan juga `supabase/schema-v4-manual-project.sql`.
 2. Di Supabase Authentication, aktifkan Email provider. Untuk Microsoft, buat App Registration di Microsoft Entra ID, aktifkan provider Azure di Supabase Authentication, lalu masukkan Client ID, Client Secret, dan Tenant ID. Tambahkan URL aplikasi ke Redirect URLs.
 3. Salin `.env.example` menjadi `.env.local`, lalu isi URL dan keys Supabase. `SUPABASE_SERVICE_ROLE_KEY` hanya digunakan di server untuk cron—jangan pernah diberi awalan `NEXT_PUBLIC_`.
 4. Daftarkan akun pertama dari aplikasi. Buka tabel `profiles` di Supabase, salin UUID akun tersebut, lalu jalankan baris `update` yang tersedia di bagian bawah `supabase/schema.sql` untuk menjadikannya admin.

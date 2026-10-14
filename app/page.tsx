@@ -17,10 +17,11 @@ type Project = { id: string; project_code: string; name: string; company?: strin
 type WorkLog = {
   id: string; user_id: string; log_date: string;
   project_id: string | null; hours: number | null; is_leave: boolean;
+  custom_project_name?: string | null; custom_project_code?: string | null;
   profiles?: { full_name: string };
   projects?: { name: string; project_code: string } | null;
 };
-type DayEntry = { project_id: string; project_name: string; project_code: string; hours: number };
+type DayEntry = { project_id: string | null; project_name: string; project_code: string; hours: number; manual: boolean };
 type AdminLog = {
   id: string; action: string; details: any; created_at: string;
   admin?: { full_name: string } | null;
@@ -90,6 +91,10 @@ const text = {
     confirmPassword: 'Konfirmasi Password', passwordMismatch: 'Password baru tidak cocok.',
     passwordTooShort: 'Password minimal 6 karakter.', passwordChanged: 'Password berhasil diubah.',
     switchToEmployee: 'Karyawan', switchToAdmin: 'Admin',
+    logWork: 'Catat jam kerja', logWorkSub: 'Proyek & jam per tanggal', myLogs: 'Pencatatan saya',
+    jenis: 'Jenis', kerja: 'Kerja', close: 'Tutup', manual: 'Manual', logged: 'Tercatat',
+    useManual: 'Gunakan', manualCode: 'Kode proyek (opsional)', noProjectMatch: 'Proyek tidak ditemukan',
+    replaceHint: 'Tanggal ini sudah tercatat. Menyimpan akan mengganti pencatatan sebelumnya.', noLogs: 'Belum ada pencatatan',
   },
   en: {
     app: 'Weave', login: 'Sign in', email: 'Email', password: 'Password',
@@ -133,6 +138,10 @@ const text = {
     passwordTooShort: 'Password must be at least 6 characters.', passwordChanged: 'Password changed successfully.',
     switchToEmployee: 'Employee', switchToAdmin: 'Admin',
     support: 'Support',
+    logWork: 'Log work hours', logWorkSub: 'Projects & hours per date', myLogs: 'My entries',
+    jenis: 'Type', kerja: 'Work', close: 'Close', manual: 'Manual', logged: 'Logged',
+    useManual: 'Use', manualCode: 'Project code (optional)', noProjectMatch: 'No matching project',
+    replaceHint: 'This date already has entries. Saving will replace them.', noLogs: 'No entries yet',
   }
 } as const;
 
@@ -146,6 +155,8 @@ function getLast45Days(): string[] {
   }
   return days;
 }
+function logProjectName(w: WorkLog) { return w.projects?.name || w.custom_project_name || ''; }
+function logProjectCode(w: WorkLog) { return w.projects?.project_code || w.custom_project_code || ''; }
 function getMonthKey(date = new Date()) { return date.toISOString().slice(0, 7); }
 function getExportMonths() {
   return [0, 1, 2].map(offset => {
@@ -203,6 +214,7 @@ export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
+  const [manualProjects, setManualProjects] = useState(false);
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -302,9 +314,17 @@ export default function Home() {
     const devAccess = Boolean((own as any).dev_access) || isDeveloperEmail(identityEmail);
     setProfile({ ...(own as Profile), full_name: profileName, role: effectiveRole, email: identityEmail, dev_access: devAccess });
 
+    const logColumns = 'id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)';
+    const loadLogs = async () => {
+      // custom_project_* columns exist only after supabase/schema-v4-manual-project.sql has been run.
+      const withManual = await supabase.from('work_logs').select(`${logColumns},custom_project_name,custom_project_code`).order('log_date', { ascending: false });
+      setManualProjects(!withManual.error);
+      if (!withManual.error) return withManual;
+      return supabase.from('work_logs').select(logColumns).order('log_date', { ascending: false });
+    };
     const [{ data: allProjects }, { data: logs }, { data: allUsers }] = await Promise.all([
       supabase.from('projects').select('id,project_code,name,company,description,is_active,inactive_from').order('created_at', { ascending: false }),
-      supabase.from('work_logs').select('id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)').order('log_date', { ascending: false }),
+      loadLogs(),
       (effectiveRole === 'admin' || Boolean((own as any).dev_access)) ? supabase.from('profiles').select('id,full_name,role,dev_access,dev_role').order('full_name') : Promise.resolve({ data: [] })
     ]);
 
@@ -510,7 +530,7 @@ export default function Home() {
       if (period !== 'all' && !wl.log_date.startsWith(period)) return false;
       if (fromDate && wl.log_date < fromDate) return false;
       if (toDate && wl.log_date > toDate) return false;
-      const key = `${wl.profiles?.full_name} ${wl.projects?.name} ${wl.projects?.project_code}`.toLowerCase();
+      const key = `${wl.profiles?.full_name} ${logProjectName(wl)} ${logProjectCode(wl)}`.toLowerCase();
       return key.includes(query.toLowerCase());
     });
 
@@ -530,8 +550,8 @@ export default function Home() {
     rows.forEach(r => {
       const row = sheet.addRow({
         user: r.profiles?.full_name || '',
-        project: r.projects?.name || '',
-        code: r.projects?.project_code || '',
+        project: logProjectName(r),
+        code: logProjectCode(r),
         date: r.log_date,
         hours: r.is_leave ? '' : (r.hours ?? 0),
         leave: r.is_leave ? t.leave : '',
@@ -618,7 +638,7 @@ export default function Home() {
           currentProfile={profile}
         />
       ) : (
-        <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} onRefresh={load} />
+        <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} manualProjects={manualProjects} onRefresh={load} />
       )}
 
       {createOpen && <ProjectModal t={t} users={users} onClose={() => setCreateOpen(false)} onSubmit={createProjectFn} />}
@@ -813,8 +833,21 @@ function Auth({ lang, setLang, t, mode, setMode, onSubmit, onMicrosoft, adminSet
 }
 
 // ─── User View ────────────────────────────────────────────────────────────────
-function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
-  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; onRefresh: () => void;
+type EntryDraft = { tempId: string; project_id: string; custom_name: string; custom_code: string; query: string; hours: string };
+
+function newEntryDraft(): EntryDraft {
+  return { tempId: crypto.randomUUID(), project_id: '', custom_name: '', custom_code: '', query: '', hours: '' };
+}
+
+function formatCardDate(dateStr: string, lang: Lang): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const formatted = d.toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (dateStr === todayStr()) return `${lang === 'id' ? 'Hari ini' : 'Today'} · ${formatted}`;
+  return formatted;
+}
+
+function UserView({ t, lang, profile, projects, workLogs, manualProjects, onRefresh }: {
+  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; manualProjects: boolean; onRefresh: () => void;
 }) {
   const days = getLast45Days();
   const logsByDate = useMemo(() => {
@@ -823,21 +856,25 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
       if (!map[wl.log_date]) map[wl.log_date] = { isLeave: false, entries: [] };
       if (wl.is_leave) {
         map[wl.log_date].isLeave = true;
-      } else if (wl.project_id) {
+      } else if (wl.project_id || wl.custom_project_name) {
         map[wl.log_date].entries.push({
           project_id: wl.project_id,
-          project_name: wl.projects?.name || '',
-          project_code: wl.projects?.project_code || '',
-          hours: wl.hours || 0
+          project_name: logProjectName(wl),
+          project_code: logProjectCode(wl),
+          hours: wl.hours || 0,
+          manual: !wl.project_id
         });
       }
     }
     return map;
   }, [workLogs]);
+  const loggedDates = useMemo(() => Object.keys(logsByDate).sort((a, b) => b.localeCompare(a)), [logsByDate]);
 
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(todayStr());
   const [saving, setSaving] = useState(false);
-  const [dateEntries, setDateEntries] = useState<Array<{ tempId: string; project_id: string; hours: string }>>([]);
+  const [dateEntries, setDateEntries] = useState<EntryDraft[]>([newEntryDraft()]);
   const [isLeaveMode, setIsLeaveMode] = useState(false);
   const [changePassOpen, setChangePassOpen] = useState(false);
 
@@ -855,57 +892,65 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
   }
 
   async function handleDeleteDate(date: string) {
-    if (!confirm(`${t.delete} ${formatDateDisplay(date, lang).replace('\n', ' ')}?`)) return;
+    if (!confirm(`${t.delete} ${formatCardDate(date, lang)}?`)) return;
     setSaving(true);
     const { error } = await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', date);
     setSaving(false);
     if (error) showAlert(error.message); else onRefresh();
   }
 
-  function openDate(date: string) {
+  function loadDate(date: string) {
     const existing = logsByDate[date];
-    if (existing?.isLeave) {
-      setIsLeaveMode(true);
-      setDateEntries([]);
-    } else {
-      setIsLeaveMode(false);
-      const entries = (existing?.entries || []).map(e => ({
-        tempId: crypto.randomUUID(),
-        project_id: e.project_id,
-        hours: String(e.hours)
-      }));
-      setDateEntries(entries.length ? entries : [{ tempId: crypto.randomUUID(), project_id: '', hours: '' }]);
-    }
+    setIsLeaveMode(Boolean(existing?.isLeave));
+    const entries = (existing?.entries || []).map(e => ({
+      ...newEntryDraft(),
+      project_id: e.project_id || '',
+      custom_name: e.manual ? e.project_name : '',
+      custom_code: e.manual ? e.project_code : '',
+      query: e.manual ? e.project_name : `${e.project_name} — ${e.project_code}`,
+      hours: String(e.hours)
+    }));
+    setDateEntries(entries.length ? entries : [newEntryDraft()]);
     setSelectedDate(date);
   }
 
-  function addEntry() {
-    setDateEntries(prev => [...prev, { tempId: crypto.randomUUID(), project_id: '', hours: '' }]);
+  function openForm(date: string) {
+    loadDate(date);
+    setFormOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function updateEntry(tempId: string, field: 'project_id' | 'hours', value: string) {
-    setDateEntries(prev => prev.map(e => e.tempId === tempId ? { ...e, [field]: value } : e));
+  function addEntry() {
+    setDateEntries(prev => [...prev, newEntryDraft()]);
+  }
+
+  function updateEntry(tempId: string, patch: Partial<EntryDraft>) {
+    setDateEntries(prev => prev.map(e => e.tempId === tempId ? { ...e, ...patch } : e));
   }
 
   function removeEntry(tempId: string) {
     setDateEntries(prev => prev.filter(e => e.tempId !== tempId));
   }
 
+  const entriesValid = dateEntries.every(e =>
+    (e.project_id || e.custom_name.trim()) && e.hours && !isNaN(Number(e.hours)) && Number(e.hours) > 0
+  );
+  const canSubmit = !saving && Boolean(selectedDate) && (isLeaveMode || entriesValid);
+
   async function handleMarkLeave() {
-    if (!selectedDate) return;
     setSaving(true);
     await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', selectedDate);
     const { error } = await supabase.from('work_logs').insert({ user_id: profile.id, log_date: selectedDate, is_leave: true });
     setSaving(false);
     if (error) showAlert(error.message);
-    else { setSelectedDate(null); onRefresh(); }
+    else { setFormOpen(false); onRefresh(); }
   }
 
   async function handleSubmit() {
     if (!selectedDate) return;
     if (isLeaveMode) return handleMarkLeave();
     for (const e of dateEntries) {
-      if (!e.project_id) { showAlert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
+      if (!e.project_id && !e.custom_name.trim()) { showAlert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
       if (!e.hours || isNaN(Number(e.hours)) || Number(e.hours) <= 0) {
         showAlert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return;
       }
@@ -913,13 +958,15 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
     setSaving(true);
     await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', selectedDate);
     const inserts = dateEntries.map(e => ({
-      user_id: profile.id, log_date: selectedDate,
-      project_id: e.project_id, hours: Number(e.hours), is_leave: false
+      user_id: profile.id, log_date: selectedDate, hours: Number(e.hours), is_leave: false,
+      ...(e.project_id
+        ? { project_id: e.project_id }
+        : { project_id: null, custom_project_name: e.custom_name.trim(), custom_project_code: e.custom_code.trim() || null })
     }));
     const { error } = await supabase.from('work_logs').insert(inserts);
     setSaving(false);
     if (error) showAlert(error.message);
-    else { setSelectedDate(null); onRefresh(); }
+    else { setFormOpen(false); onRefresh(); }
   }
 
   return (
@@ -959,97 +1006,70 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
         </div>
       )}
 
-      <div className="days-table-wrap">
-        <table className="days-table">
-          <thead>
-            <tr>
-              <th>{t.tanggal}</th>
-              <th>{t.namaProyek}</th>
-              <th>{t.nomorProyek}</th>
-              <th>{t.jamKerjaHeader}</th>
-              <th>{t.actions}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {days.map(date => {
-              const dayData = logsByDate[date];
-              const isToday = date === todayStr();
-              if (dayData?.isLeave) {
-                return (
-                  <tr key={date} className={isToday ? 'row-today' : ''}>
-                    <td className="date-cell">
-                      {isToday && <span className="today-dot" />}
-                      <span className="date-label">{formatDateDisplay(date, lang).replace('\n', ' ')}</span>
-                    </td>
-                    <td className="empty-row-hint">—</td>
-                    <td className="empty-row-hint">—</td>
-                    <td><span className="badge-leave">{t.leaveDay}</span></td>
-                    <td><div className="action-btns"><button className="btn-action" onClick={() => openDate(date)} title={t.edit}><Pencil size={14} /></button><button className="btn-action danger" onClick={() => handleDeleteDate(date)} title={t.delete}><Trash2 size={14} /></button></div></td>
-                  </tr>
-                );
-              }
-              if (dayData?.entries?.length) {
-                return dayData.entries.map((entry, idx) => (
-                  <tr key={`${date}-${idx}`} className={isToday ? 'row-today' : ''}>
-                    {idx === 0 && (
-                      <td className="date-cell" rowSpan={dayData.entries.length}>
-                        {isToday && <span className="today-dot" />}
-                        <span className="date-label">{formatDateDisplay(date, lang).replace('\n', ' ')}</span>
-                      </td>
-                    )}
-                    <td>{entry.project_name}</td>
-                    <td><span className="code-badge">{entry.project_code}</span></td>
-                    <td><span className="hours-badge">{entry.hours} jam</span></td>
-                    {idx === 0 && (
-                      <td rowSpan={dayData.entries.length}>
-                        <div className="action-btns"><button className="btn-action" onClick={() => openDate(date)} title={t.edit}><Pencil size={14} /></button><button className="btn-action danger" onClick={() => handleDeleteDate(date)} title={t.delete}><Trash2 size={14} /></button></div>
-                      </td>
-                    )}
-                  </tr>
-                ));
-              }
-              return (
-                <tr key={date} className={isToday ? 'row-today' : ''}>
-                  <td className="date-cell">
-                    {isToday && <span className="today-dot" />}
-                    <span className="date-label">{formatDateDisplay(date, lang).replace('\n', ' ')}</span>
-                  </td>
-                  <td colSpan={3} className="empty-row-hint">—</td>
-                  <td>
-                    <button className="btn-add-circle" onClick={() => openDate(date)}><Plus size={16} /></button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {selectedDate && (
-        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setSelectedDate(null)}>
-          <div className="modal entry-modal">
-            <div className="modal-header">
-              <h2>{formatDateDisplay(selectedDate, lang).replace('\n', ' ')}</h2>
-              <button className="btn-ghost-icon" onClick={() => setSelectedDate(null)}><X size={18} /></button>
+      <div className="worklog-column">
+        {!formOpen ? (
+          <button className="worklog-cta" onClick={() => openForm(todayStr())}>
+            <span className="worklog-cta-title">{t.logWork}</span>
+            <span className="worklog-cta-sub">{t.logWorkSub}</span>
+          </button>
+        ) : (
+          <div className="worklog-form">
+            <div className="worklog-form-header">
+              <span className="worklog-section-label">{t.logWork}</span>
+              <button className="btn-secondary" onClick={() => setFormOpen(false)}>{t.close}</button>
             </div>
 
-            {isLeaveMode ? (
-              <div className="leave-confirm">
-                <span className="badge-leave lg">{t.leaveDay}</span>
-                <p>{lang === 'id' ? 'Tanggal ini ditandai sebagai cuti.' : 'This date is marked as leave.'}</p>
-                <button className="btn-ghost" onClick={() => setIsLeaveMode(false)}>
-                  {lang === 'id' ? 'Ubah ke input proyek' : 'Switch to project input'}
-                </button>
-              </div>
-            ) : (
-              <div className="entry-list">
-                {dateEntries.map((entry, idx) => (
-                  <ProjectEntryRow
-                    key={entry.tempId} entry={entry} projects={projects} lang={lang} t={t}
-                    onChange={(field, val) => updateEntry(entry.tempId, field, val)}
-                    onRemove={dateEntries.length > 1 ? () => removeEntry(entry.tempId) : undefined}
-                    index={idx}
-                  />
+            <div className="field">
+              <label>{t.jenis}</label>
+              <select value={isLeaveMode ? 'leave' : 'work'} onChange={e => setIsLeaveMode(e.target.value === 'leave')}>
+                <option value="work">{t.kerja}</option>
+                <option value="leave">{t.leaveDay}</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label>{t.tanggal}</label>
+              <input type="date" value={selectedDate} min={days[days.length - 1]} max={days[0]}
+                onChange={e => e.target.value && loadDate(e.target.value)} />
+              {logsByDate[selectedDate] && <p className="worklog-hint">{t.replaceHint}</p>}
+            </div>
+
+            {!isLeaveMode && (
+              <div className="worklog-entries">
+                {dateEntries.map(entry => (
+                  <div key={entry.tempId} className="entry-row">
+                    <div className="entry-row-fields">
+                      <div className="entry-field">
+                        <label>{t.namaProyek} / {t.nomorProyek}</label>
+                        <ProjectCombobox t={t} entry={entry} projects={projects} allowManual={manualProjects}
+                          onChange={patch => updateEntry(entry.tempId, patch)} />
+                      </div>
+                      {!entry.project_id && entry.custom_name && (
+                        <div className="entry-field">
+                          <label>{t.manualCode}</label>
+                          <input className="field-input" value={entry.custom_code}
+                            onChange={e => updateEntry(entry.tempId, { custom_code: e.target.value })} />
+                        </div>
+                      )}
+                      <div className="entry-field entry-field-hours">
+                        <label>{t.inputHours}</label>
+                        <div className="hours-input-wrap">
+                          <Clock size={14} className="hours-icon" />
+                          <input
+                            type="number" min="0.5" max="24" step="0.5"
+                            className="field-input hours-input"
+                            value={entry.hours}
+                            onChange={e => updateEntry(entry.tempId, { hours: e.target.value })}
+                            placeholder="0"
+                          />
+                          <span className="hours-unit">jam</span>
+                        </div>
+                      </div>
+                    </div>
+                    {dateEntries.length > 1 && (
+                      <button className="btn-remove-entry" onClick={() => removeEntry(entry.tempId)} title={t.delete}><X size={14} /></button>
+                    )}
+                  </div>
                 ))}
                 <button className="btn-add-entry" onClick={addEntry}>
                   <Plus size={14} /> {t.addProject}
@@ -1057,78 +1077,143 @@ function UserView({ t, lang, profile, projects, workLogs, onRefresh }: {
               </div>
             )}
 
-            <div className="modal-footer">
-              {!isLeaveMode && (
-                <button className="btn-leave" onClick={() => { setIsLeaveMode(true); setDateEntries([]); }}>
-                  {t.leaveDay}
-                </button>
-              )}
-              <div className="modal-footer-right">
-                <button className="btn-secondary" onClick={() => setSelectedDate(null)}>{t.cancel}</button>
-                <button className="btn-primary" onClick={handleSubmit} disabled={saving}>
-                  {saving ? '…' : t.submit}
-                </button>
-              </div>
-            </div>
+            <button className="btn-primary worklog-submit" onClick={handleSubmit} disabled={!canSubmit}>
+              {saving ? '…' : t.save}
+            </button>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
+        )}
 
-function ProjectEntryRow({ entry, projects, lang, t, onChange, onRemove, index }: {
-  entry: { tempId: string; project_id: string; hours: string };
-  projects: Project[]; lang: Lang; t: any;
-  onChange: (field: 'project_id' | 'hours', val: string) => void;
-  onRemove?: () => void;
-  index: number;
-}) {
-  const selectedProject = projects.find(p => p.id === entry.project_id);
-  return (
-    <div className="entry-row">
-      <div className="entry-row-fields">
-        <div className="entry-field">
-          <label>{t.namaProyek} / {t.nomorProyek}</label>
-          <div className="project-select-row">
-            <select
-              className="field-input project-name-select"
-              value={entry.project_id}
-              onChange={e => onChange('project_id', e.target.value)}
-            >
-              <option value="">{t.pilihProyek}</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name} — {p.project_code}</option>
-              ))}
-            </select>
-            <div className="project-code-display">
-              {selectedProject ? <span className="code-badge">{selectedProject.project_code}</span> : <span className="code-placeholder">—</span>}
-            </div>
+        <button className="worklog-list-header" onClick={() => setListOpen(o => !o)}>
+          <span className="worklog-section-label">{t.myLogs}</span>
+          <span className="worklog-count">{loggedDates.length} <ChevronDown size={14} className={listOpen ? 'chevron-up' : ''} /></span>
+        </button>
+
+        {listOpen && (
+          <div className="worklog-list">
+            {!loggedDates.length && <p className="worklog-empty">{t.noLogs}</p>}
+            {loggedDates.map(date => {
+              const day = logsByDate[date];
+              const total = day.entries.reduce((s, e) => s + e.hours, 0);
+              const hasManual = day.entries.some(e => e.manual);
+              const editable = days.includes(date);
+              return (
+                <div key={date} className={`worklog-card${date === todayStr() ? ' is-today' : ''}`}>
+                  <div className="worklog-card-top">
+                    <strong className="worklog-card-title">
+                      {day.isLeave ? t.leaveDay : day.entries.map(e => e.project_name).join(', ')}
+                    </strong>
+                    {day.isLeave
+                      ? <span className="badge-leave">{t.leaveDay}</span>
+                      : hasManual
+                        ? <span className="hours-badge warn">{t.manual}</span>
+                        : <span className="hours-badge">{t.logged}</span>}
+                  </div>
+                  <div className="worklog-card-date">
+                    {formatCardDate(date, lang)}{!day.isLeave && ` · ${total} jam`}
+                  </div>
+                  {!day.isLeave && (
+                    <div className="worklog-card-detail">
+                      {day.entries.map(e => `${e.project_code || e.project_name} · ${e.hours} jam`).join(', ')}
+                    </div>
+                  )}
+                  {editable && (
+                    <div className="worklog-card-meta">
+                      <button className="link-button" onClick={() => openForm(date)}>{t.edit}</button>
+                      {' · '}
+                      <button className="link-button" onClick={() => handleDeleteDate(date)} disabled={saving}>{t.delete}</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </div>
-        <div className="entry-field entry-field-hours">
-          <label>{t.inputHours}</label>
-          <div className="hours-input-wrap">
-            <Clock size={14} className="hours-icon" />
-            <input
-              type="number" min="0.5" max="24" step="0.5"
-              className="field-input hours-input"
-              value={entry.hours}
-              onChange={e => onChange('hours', e.target.value)}
-              placeholder="0"
-            />
-            <span className="hours-unit">jam</span>
-          </div>
-        </div>
+        )}
       </div>
-      {onRemove && (
-        <button className="btn-remove-entry" onClick={onRemove} title="Hapus"><X size={14} /></button>
+    </div>
+  );
+}
+
+// Searchable project picker; when nothing matches, the typed text can be used as a manual project.
+function ProjectCombobox({ t, entry, projects, allowManual, onChange }: {
+  t: any; entry: EntryDraft; projects: Project[]; allowManual: boolean;
+  onChange: (patch: Partial<EntryDraft>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const q = entry.query.trim().toLowerCase();
+  const isSelectedLabel = Boolean(entry.project_id || entry.custom_name);
+  const matches = isSelectedLabel || !q
+    ? projects
+    : projects.filter(p => `${p.name} ${p.project_code}`.toLowerCase().includes(q));
+  const exact = projects.some(p => p.name.toLowerCase() === q || p.project_code.toLowerCase() === q);
+  const showManual = allowManual && Boolean(q) && !exact && !isSelectedLabel;
+  const optionCount = matches.length + (showManual ? 1 : 0);
+
+  function pickProject(p: Project) {
+    onChange({ project_id: p.id, custom_name: '', custom_code: '', query: `${p.name} — ${p.project_code}` });
+    setOpen(false);
+  }
+  function pickManual() {
+    onChange({ project_id: '', custom_name: entry.query.trim(), query: entry.query.trim() });
+    setOpen(false);
+  }
+  function choose(index: number) {
+    if (index < matches.length) pickProject(matches[index]);
+    else if (showManual) pickManual();
+  }
+
+  return (
+    <div className="combobox">
+      <input
+        className="field-input"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        value={entry.query}
+        placeholder={t.pilihProyek}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          setOpen(false);
+          const match = !isSelectedLabel && q && projects.find(p => p.name.toLowerCase() === q || p.project_code.toLowerCase() === q);
+          if (match) pickProject(match);
+        }}
+        onChange={e => {
+          onChange({ query: e.target.value, project_id: '', custom_name: '', custom_code: '' });
+          setActive(0);
+          setOpen(true);
+        }}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive(a => Math.min(a + 1, optionCount - 1)); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(a - 1, 0)); }
+          else if (e.key === 'Enter' && open && optionCount) { e.preventDefault(); choose(active); }
+          else if (e.key === 'Escape') setOpen(false);
+        }}
+      />
+      {open && (
+        <ul className="combobox-list" role="listbox">
+          {matches.map((p, i) => (
+            <li key={p.id} role="option" aria-selected={p.id === entry.project_id}
+              className={`combobox-option${i === active ? ' active' : ''}`}
+              onMouseDown={e => { e.preventDefault(); pickProject(p); }}
+              onMouseEnter={() => setActive(i)}>
+              <span>{p.name}</span><span className="code-badge">{p.project_code}</span>
+            </li>
+          ))}
+          {showManual && (
+            <li role="option" aria-selected={false}
+              className={`combobox-option combobox-manual${active === matches.length ? ' active' : ''}`}
+              onMouseDown={e => { e.preventDefault(); pickManual(); }}
+              onMouseEnter={() => setActive(matches.length)}>
+              <Plus size={13} /> {t.useManual} “{entry.query.trim()}” <span className="hours-badge warn">{t.manual}</span>
+            </li>
+          )}
+          {!optionCount && <li className="combobox-empty">{t.noProjectMatch}</li>}
+        </ul>
       )}
     </div>
   );
 }
 
-// ─── Admin View ────────────────────────────────────────────────────────────────
 function AdminView({
   t, lang, projects, users, workLogs, query, setQuery, sortBy, setSortBy,
   onExport, onCreate, onEdit, onDelete, onToggleActive,
@@ -1150,7 +1235,7 @@ function AdminView({
       .filter((w: WorkLog) => !fromDate || w.log_date >= fromDate)
       .filter((w: WorkLog) => !toDate || w.log_date <= toDate)
       .filter((w: WorkLog) => {
-        const key = `${w.profiles?.full_name} ${w.projects?.name} ${w.projects?.project_code}`.toLowerCase();
+        const key = `${w.profiles?.full_name} ${logProjectName(w)} ${logProjectCode(w)}`.toLowerCase();
         return key.includes(query.toLowerCase());
       })
       .sort((a: WorkLog, b: WorkLog) => {
@@ -1281,8 +1366,8 @@ function AdminView({
               {records.map((r: WorkLog) => (
                 <tr key={r.id}>
                   <td>{r.profiles?.full_name}</td>
-                  <td>{r.projects?.name}</td>
-                  <td><span className="code-badge">{r.projects?.project_code}</span></td>
+                  <td>{logProjectName(r)}{!r.project_id && <span className="hours-badge warn manual-tag">{t.manual}</span>}</td>
+                  <td>{logProjectCode(r) ? <span className="code-badge">{logProjectCode(r)}</span> : <span className="code-placeholder">—</span>}</td>
                   <td>{r.log_date}</td>
                   <td><span className="hours-badge">{r.hours} jam</span></td>
                 </tr>
