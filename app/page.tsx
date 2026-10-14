@@ -9,20 +9,16 @@ import {
   Settings, UserCog, AtSign, Mail, Sun, Moon
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { showAlert, showStatus, registerNotifiers } from '@/lib/notify';
+import {
+  CATEGORY_LABEL, draftToEntry, isDraftReady, isManualProject, logProjectCode, logProjectName, newEntryDraft, saveDay,
+  type EntryDraft, type Project, type WorkCategory, type WorkLog,
+} from '@/lib/worklog';
+import { EntryFields } from '@/components/EntryFields';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Lang = 'id' | 'en';
 type Profile = { id: string; full_name: string; role: 'admin' | 'user'; email?: string; dev_access?: boolean; dev_role?: string | null };
-type Project = { id: string; project_code: string; name: string; company?: string; description: string; is_active: boolean; inactive_from: string | null };
-type WorkLog = {
-  id: string; user_id: string; log_date: string;
-  project_id: string | null; hours: number | null; is_leave: boolean;
-  custom_project_name?: string | null; custom_project_code?: string | null;
-  category?: WorkCategory; description?: string | null;
-  profiles?: { full_name: string };
-  projects?: { name: string; project_code: string } | null;
-};
-type WorkCategory = 'project' | 'quotation' | 'training';
 type DayEntry = { project_id: string | null; project_name: string; project_code: string; hours: number; manual: boolean; category: WorkCategory; description: string };
 type AdminLog = {
   id: string; action: string; details: any; created_at: string;
@@ -35,19 +31,6 @@ type AppPopup = { id: string; title: string; body: string; custom_label: string 
 
 const PROTECTED_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 const DEVELOPER_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
-
-// ─── Global alert popup ─────────────────────────────────────────────────────
-// Lets any function (even inside child components) trigger the popup without
-// prop-drilling, the same way window.alert() could be called from anywhere.
-let alertSetter: ((message: string) => void) | null = null;
-let statusSetter: ((message: string | null) => void) | null = null;
-function showAlert(message: string) {
-  if (alertSetter) alertSetter(message);
-  else if (typeof window !== 'undefined') window.alert(message);
-}
-function showStatus(message: string) {
-  if (statusSetter) statusSetter(message);
-}
 
 // ─── i18n ─────────────────────────────────────────────────────────────────────
 const text = {
@@ -161,11 +144,6 @@ function getLast45Days(): string[] {
   }
   return days;
 }
-const WORK_CATEGORIES: WorkCategory[] = ['project', 'quotation', 'training'];
-const CATEGORY_LABEL: Record<WorkCategory, string> = { project: 'Project', quotation: 'Quotation', training: 'Training' };
-function logProjectName(w: WorkLog) { return w.projects?.name || w.custom_project_name || ''; }
-function isManualProject(w: WorkLog) { return (w.category || 'project') === 'project' && !w.project_id; }
-function logProjectCode(w: WorkLog) { return w.projects?.project_code || w.custom_project_code || ''; }
 function getMonthKey(date = new Date()) { return date.toISOString().slice(0, 7); }
 function getExportMonths() {
   return [0, 1, 2].map(offset => {
@@ -249,9 +227,7 @@ export default function Home() {
   const [dismissedPopups, setDismissedPopups] = useState<string[]>([]);
 
   useEffect(() => {
-    alertSetter = setAlertMessage;
-    statusSetter = setStatusMessage;
-    return () => { alertSetter = null; statusSetter = null; };
+    return registerNotifiers(setAlertMessage, setStatusMessage);
   }, []);
 
   useEffect(() => {
@@ -894,12 +870,6 @@ function ChangePasswordModal({ t, lang, onClose }: { t: any; lang: Lang; onClose
   );
 }
 
-type EntryDraft = { tempId: string; category: WorkCategory; description: string; project_id: string; custom_name: string; custom_code: string; query: string; hours: string };
-
-function newEntryDraft(): EntryDraft {
-  return { tempId: crypto.randomUUID(), category: 'project', description: '', project_id: '', custom_name: '', custom_code: '', query: '', hours: '' };
-}
-
 function entryLabel(e: DayEntry) {
   if (e.category === 'project') return e.project_name;
   return e.description ? `${CATEGORY_LABEL[e.category]}: ${e.description}` : CATEGORY_LABEL[e.category];
@@ -999,9 +969,7 @@ function UserView({ t, lang, profile, projects, workLogs, hasV4Schema, onRefresh
     setDateEntries(prev => prev.filter(e => e.tempId !== tempId));
   }
 
-  const entriesValid = dateEntries.every(e =>
-    (e.category !== 'project' || e.project_id || e.custom_name.trim()) && e.hours && !isNaN(Number(e.hours)) && Number(e.hours) > 0
-  );
+  const entriesValid = dateEntries.every(e => isDraftReady(e));
   const canSubmit = !saving && Boolean(selectedDate) && (isLeaveMode || entriesValid);
 
   async function handleMarkLeave() {
@@ -1017,25 +985,13 @@ function UserView({ t, lang, profile, projects, workLogs, hasV4Schema, onRefresh
     if (!selectedDate) return;
     if (isLeaveMode) return handleMarkLeave();
     for (const e of dateEntries) {
-      if (e.category === 'project' && !e.project_id && !e.custom_name.trim()) { showAlert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
-      if (!e.hours || isNaN(Number(e.hours)) || Number(e.hours) <= 0) {
-        showAlert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return;
-      }
+      if (!isDraftReady(e, { requireHours: false })) { showAlert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
+      if (!isDraftReady(e)) { showAlert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return; }
     }
     setSaving(true);
-    await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', selectedDate);
-    const inserts = dateEntries.map(e => ({
-      user_id: profile.id, log_date: selectedDate, hours: Number(e.hours), is_leave: false,
-      ...(hasV4Schema ? { category: e.category, description: e.description.trim() || null } : {}),
-      ...(e.category !== 'project'
-        ? { project_id: null }
-        : e.project_id
-          ? { project_id: e.project_id }
-          : { project_id: null, custom_project_name: e.custom_name.trim(), custom_project_code: e.custom_code.trim() || null })
-    }));
-    const { error } = await supabase.from('work_logs').insert(inserts);
+    const { error } = await saveDay(supabase, profile.id, selectedDate, dateEntries.map(draftToEntry), hasV4Schema);
     setSaving(false);
-    if (error) showAlert(error.message);
+    if (error) showAlert(error);
     else { setFormOpen(false); onRefresh(); }
   }
 
@@ -1077,53 +1033,8 @@ function UserView({ t, lang, profile, projects, workLogs, hasV4Schema, onRefresh
               <div className="worklog-entries">
                 {dateEntries.map(entry => (
                   <div key={entry.tempId} className="entry-row" data-entry-id={entry.tempId}>
-                    <div className="entry-row-fields">
-                      {hasV4Schema && (
-                        <div className="entry-field">
-                          <label>{t.kategori}</label>
-                          <select className="field-input" value={entry.category}
-                            onChange={e => updateEntry(entry.tempId, { category: e.target.value as WorkCategory, project_id: '', custom_name: '', custom_code: '', query: '' })}>
-                            {WORK_CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
-                          </select>
-                        </div>
-                      )}
-                      {entry.category === 'project' && (
-                        <div className="entry-field">
-                          <label>{t.namaProyek} / {t.nomorProyek}</label>
-                          <ProjectCombobox t={t} entry={entry} projects={projects} allowManual={hasV4Schema}
-                            onChange={patch => updateEntry(entry.tempId, patch)} />
-                        </div>
-                      )}
-                      {entry.category === 'project' && !entry.project_id && entry.custom_name && (
-                        <div className="entry-field">
-                          <label>{t.manualCode}</label>
-                          <input className="field-input" value={entry.custom_code}
-                            onChange={e => updateEntry(entry.tempId, { custom_code: e.target.value })} />
-                        </div>
-                      )}
-                      {hasV4Schema && (
-                        <div className="entry-field">
-                          <label>{t.deskripsi}</label>
-                          <input className="field-input" value={entry.description}
-                            placeholder={entry.category === 'quotation' ? t.descQuotation : entry.category === 'training' ? t.descTraining : ''}
-                            onChange={e => updateEntry(entry.tempId, { description: e.target.value })} />
-                        </div>
-                      )}
-                      <div className="entry-field entry-field-hours">
-                        <label>{t.inputHours}</label>
-                        <div className="hours-input-wrap">
-                          <Clock size={14} className="hours-icon" />
-                          <input
-                            type="number" min="0.5" max="24" step="0.5"
-                            className="field-input hours-input"
-                            value={entry.hours}
-                            onChange={e => updateEntry(entry.tempId, { hours: e.target.value })}
-                            placeholder="0"
-                          />
-                          <span className="hours-unit">jam</span>
-                        </div>
-                      </div>
-                    </div>
+                    <EntryFields t={t} entry={entry} projects={projects} hasV4Schema={hasV4Schema}
+                      onChange={patch => updateEntry(entry.tempId, patch)} />
                     {dateEntries.length > 1 && (
                       <button className="btn-remove-entry" onClick={() => removeEntry(entry.tempId)} title={t.delete}><X size={14} /></button>
                     )}
@@ -1187,87 +1098,6 @@ function UserView({ t, lang, profile, projects, workLogs, hasV4Schema, onRefresh
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-// Searchable project picker; when nothing matches, the typed text can be used as a manual project.
-function ProjectCombobox({ t, entry, projects, allowManual, onChange }: {
-  t: any; entry: EntryDraft; projects: Project[]; allowManual: boolean;
-  onChange: (patch: Partial<EntryDraft>) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  const q = entry.query.trim().toLowerCase();
-  const isSelectedLabel = Boolean(entry.project_id || entry.custom_name);
-  const matches = isSelectedLabel || !q
-    ? projects
-    : projects.filter(p => `${p.name} ${p.project_code}`.toLowerCase().includes(q));
-  const exact = projects.some(p => p.name.toLowerCase() === q || p.project_code.toLowerCase() === q);
-  const showManual = allowManual && Boolean(q) && !exact && !isSelectedLabel;
-  const optionCount = matches.length + (showManual ? 1 : 0);
-
-  function pickProject(p: Project) {
-    onChange({ project_id: p.id, custom_name: '', custom_code: '', query: `${p.name} — ${p.project_code}` });
-    setOpen(false);
-  }
-  function pickManual() {
-    onChange({ project_id: '', custom_name: entry.query.trim(), query: entry.query.trim() });
-    setOpen(false);
-  }
-  function choose(index: number) {
-    if (index < matches.length) pickProject(matches[index]);
-    else if (showManual) pickManual();
-  }
-
-  return (
-    <div className="combobox">
-      <input
-        className="field-input"
-        role="combobox"
-        aria-expanded={open}
-        aria-autocomplete="list"
-        value={entry.query}
-        placeholder={t.pilihProyek}
-        onFocus={() => setOpen(true)}
-        onBlur={() => {
-          setOpen(false);
-          const match = !isSelectedLabel && q && projects.find(p => p.name.toLowerCase() === q || p.project_code.toLowerCase() === q);
-          if (match) pickProject(match);
-        }}
-        onChange={e => {
-          onChange({ query: e.target.value, project_id: '', custom_name: '', custom_code: '' });
-          setActive(0);
-          setOpen(true);
-        }}
-        onKeyDown={e => {
-          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive(a => Math.min(a + 1, optionCount - 1)); }
-          else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(a - 1, 0)); }
-          else if (e.key === 'Enter' && open && optionCount) { e.preventDefault(); choose(active); }
-          else if (e.key === 'Escape') setOpen(false);
-        }}
-      />
-      {open && (
-        <ul className="combobox-list" role="listbox">
-          {matches.map((p, i) => (
-            <li key={p.id} role="option" aria-selected={p.id === entry.project_id}
-              className={`combobox-option${i === active ? ' active' : ''}`}
-              onMouseDown={e => { e.preventDefault(); pickProject(p); }}
-              onMouseEnter={() => setActive(i)}>
-              <span>{p.name}</span><span className="code-badge">{p.project_code}</span>
-            </li>
-          ))}
-          {showManual && (
-            <li role="option" aria-selected={false}
-              className={`combobox-option combobox-manual${active === matches.length ? ' active' : ''}`}
-              onMouseDown={e => { e.preventDefault(); pickManual(); }}
-              onMouseEnter={() => setActive(matches.length)}>
-              <Plus size={13} /> {t.useManual} “{entry.query.trim()}” <span className="hours-badge warn">{t.manual}</span>
-            </li>
-          )}
-          {!optionCount && <li className="combobox-empty">{t.noProjectMatch}</li>}
-        </ul>
-      )}
     </div>
   );
 }
