@@ -1,6 +1,6 @@
 // Pure day-timer logic. Durations are always derived from timestamps, so closing
 // the app, sleeping or crashing never loses time. No React, no browser globals.
-import type { WorkCategory } from './worklog';
+import { CATEGORY_LABEL, type EntryDraft, type EntryInput, type ExistingEntry, type Project, type WorkCategory } from './worklog';
 
 export type TimerItem = {
   id: string;
@@ -148,4 +148,115 @@ export function resolveAway(state: DayTimerState, choice: AwayChoice): DayTimerS
     segments = [...segments, { itemId: choice.itemId, start: away.start, end: away.end }].sort((a, b) => a.start - b.start);
   }
   return { ...state, segments, pendingAway: null };
+}
+
+const HOUR_MS = 3_600_000;
+
+export function startReview(state: DayTimerState, now: number): DayTimerState {
+  if (state.pendingAway) return state;
+  return { ...state, segments: closeOpen(state.segments, now), status: 'review', idleSince: null, lastSeen: now };
+}
+
+export function backToTimer(state: DayTimerState, now: number): DayTimerState {
+  if (state.status !== 'review') return state;
+  return { ...state, status: 'paused', lastSeen: now };
+}
+
+export function isStaleDay(state: DayTimerState, now: number): boolean {
+  return state.items.length > 0 && state.date !== localDateStr(now);
+}
+
+// A day left open overnight ends at its last sign of activity, then waits in review.
+export function closeStaleDay(state: DayTimerState): DayTimerState {
+  return { ...state, segments: closeOpen(state.segments, state.lastSeen), status: 'review', idleSince: null, pendingAway: null };
+}
+
+export function roundToHalfHour(ms: number): number {
+  return Math.round((ms / HOUR_MS) * 2) / 2;
+}
+
+export type ReviewRow = ExistingEntry & { key: string; source: 'timer' | 'existing'; trackedMs: number | null };
+
+export function buildReviewRows(state: DayTimerState, now: number, existing: ExistingEntry[]): ReviewRow[] {
+  const totals = itemTotals(state, now);
+  const existingRows: ReviewRow[] = existing.map((e, i) => ({ ...e, key: `existing-${i}`, source: 'existing', trackedMs: null }));
+  const timerRows: ReviewRow[] = state.items.map(item => ({
+    key: `timer-${item.id}`, source: 'timer', trackedMs: totals[item.id] ?? 0, hours: roundToHalfHour(totals[item.id] ?? 0),
+    category: item.category, project_id: item.project_id, custom_name: item.custom_name, custom_code: item.custom_code,
+    description: item.description, label: item.label, code: item.code,
+  }));
+  return [...existingRows, ...timerRows];
+}
+
+export function reviewRowsToEntries(rows: ReviewRow[]): EntryInput[] {
+  return rows.filter(r => r.hours > 0).map(r => ({
+    category: r.category, project_id: r.project_id, custom_name: r.custom_name,
+    custom_code: r.custom_code, description: r.description, hours: r.hours,
+  }));
+}
+
+export function draftToTimerItem(d: EntryDraft, project: Project | undefined, id: string): TimerItem {
+  const description = d.description.trim();
+  const isProject = d.category === 'project';
+  const label = isProject
+    ? project?.name ?? d.custom_name.trim()
+    : description ? `${CATEGORY_LABEL[d.category]}: ${description}` : CATEGORY_LABEL[d.category];
+  return {
+    id, category: d.category,
+    project_id: isProject && d.project_id ? d.project_id : null,
+    custom_name: isProject && !d.project_id ? d.custom_name.trim() : '',
+    custom_code: isProject && !d.project_id ? d.custom_code.trim() : '',
+    description, label, code: isProject ? project?.project_code ?? d.custom_code.trim() : '',
+  };
+}
+
+type ReadStorage = Pick<Storage, 'getItem'>;
+type WriteStorage = Pick<Storage, 'setItem'>;
+type RemoveStorage = Pick<Storage, 'removeItem'>;
+
+export function storageKey(userId: string) { return `weave.dayTimer.${userId}`; }
+
+export function loadState(storage: ReadStorage, userId: string): DayTimerState | null {
+  try {
+    const raw = storage.getItem(storageKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== 1 || parsed.userId !== userId || !Array.isArray(parsed.items) || !Array.isArray(parsed.segments)) return null;
+    return parsed as DayTimerState;
+  } catch {
+    return null;
+  }
+}
+
+export function saveState(storage: WriteStorage, state: DayTimerState): boolean {
+  try { storage.setItem(storageKey(state.userId), JSON.stringify(state)); return true; } catch { return false; }
+}
+
+export function clearState(storage: RemoveStorage, userId: string): void {
+  try { storage.removeItem(storageKey(userId)); } catch { /* storage unavailable */ }
+}
+
+export const OWNER_KEY = 'weave.dayTimer.owner';
+export type OwnerRecord = { tabId: string; at: number };
+
+export function canOwn(record: OwnerRecord | null, tabId: string, now: number): boolean {
+  return !record || record.tabId === tabId || now - record.at > HEARTBEAT_MS * 2;
+}
+
+export function readOwner(storage: ReadStorage): OwnerRecord | null {
+  try {
+    const parsed = JSON.parse(storage.getItem(OWNER_KEY) || 'null');
+    return parsed && typeof parsed.tabId === 'string' && typeof parsed.at === 'number' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeOwner(storage: WriteStorage, record: OwnerRecord): void {
+  try { storage.setItem(OWNER_KEY, JSON.stringify(record)); } catch { /* storage unavailable */ }
+}
+
+export function releaseOwner(storage: ReadStorage & RemoveStorage, tabId: string): void {
+  if (readOwner(storage)?.tabId !== tabId) return;
+  try { storage.removeItem(OWNER_KEY); } catch { /* storage unavailable */ }
 }

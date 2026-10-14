@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   addItem, AWAY_THRESHOLD_MS, createDay, currentItemId, cutRange, dayTotal, detectAway, formatClock, itemTotals, localDateStr, markIdle,
   pause, resolveAway, resume, switchTo, tick,
+  backToTimer, buildReviewRows, canOwn, clearState, closeStaleDay, draftToTimerItem, HEARTBEAT_MS, isStaleDay, loadState,
+  readOwner, releaseOwner, reviewRowsToEntries, roundToHalfHour, saveState, startReview, storageKey, writeOwner,
   type DayTimerState, type TimerItem,
 } from './dayTimer';
+import { newEntryDraft } from './worklog';
 
 const MIN = 60_000;
 const T0 = new Date(2026, 9, 14, 8, 0).getTime(); // 08:00 local (Asia/Jakarta in tests)
@@ -165,5 +168,128 @@ describe('resolveAway', () => {
   it('move to an unknown item changes nothing', () => {
     const s = prompted();
     expect(resolveAway(s, { type: 'move', itemId: 'nope' })).toBe(s);
+  });
+});
+
+class MemoryStorage {
+  data = new Map<string, string>();
+  getItem(k: string) { return this.data.get(k) ?? null; }
+  setItem(k: string, v: string) { this.data.set(k, v); }
+  removeItem(k: string) { this.data.delete(k); }
+}
+
+describe('roundToHalfHour', () => {
+  it('rounds to the nearest half hour at the 15/45 minute boundaries', () => {
+    expect(roundToHalfHour(14 * MIN + 59_000)).toBe(0);
+    expect(roundToHalfHour(15 * MIN)).toBe(0.5);
+    expect(roundToHalfHour(44 * MIN + 59_000)).toBe(0.5);
+    expect(roundToHalfHour(45 * MIN)).toBe(1);
+    expect(roundToHalfHour(74 * MIN)).toBe(1);
+    expect(roundToHalfHour(75 * MIN)).toBe(1.5);
+  });
+});
+
+describe('review', () => {
+  it('startReview closes the running segment; backToTimer returns paused', () => {
+    let s = startReview(switchTo(dayWith('a'), 'a', T0), T0 + 30 * MIN);
+    expect(s.status).toBe('review');
+    expect(currentItemId(s)).toBeNull();
+    expect(itemTotals(s, T0 + 90 * MIN).a).toBe(30 * MIN);
+    s = backToTimer(s, T0 + 31 * MIN);
+    expect(s.status).toBe('paused');
+  });
+
+  it('builds rows: existing entries first, then timer items with rounded hours', () => {
+    let s = switchTo(dayWith('a', 'b'), 'a', T0);
+    s = switchTo(s, 'b', T0 + 80 * MIN);
+    s = startReview(s, T0 + 90 * MIN);
+    const existing = [{ category: 'training' as const, project_id: null, custom_name: '', custom_code: '', description: 'K3', hours: 2, label: 'Training: K3', code: '' }];
+    const rows = buildReviewRows(s, T0 + 90 * MIN, existing);
+    expect(rows.map(r => [r.source, r.label, r.trackedMs, r.hours])).toEqual([
+      ['existing', 'Training: K3', null, 2],
+      ['timer', 'Item a', 80 * MIN, 1.5],
+      ['timer', 'Item b', 10 * MIN, 0],
+    ]);
+  });
+
+  it('reviewRowsToEntries drops zero-hour rows and strips display fields', () => {
+    const s = startReview(switchTo(dayWith('a', 'b'), 'a', T0), T0 + 60 * MIN);
+    const entries = reviewRowsToEntries(buildReviewRows(s, T0 + 60 * MIN, []));
+    expect(entries).toEqual([{ category: 'project', project_id: 'p-a', custom_name: '', custom_code: '', description: '', hours: 1 }]);
+  });
+});
+
+describe('stale day', () => {
+  it('a day from an earlier local date is closed at its last heartbeat and opened in review', () => {
+    let s = tick(switchTo(dayWith('a'), 'a', T0), T0 + 8 * 60 * MIN); // last heartbeat 16:00 (gap prompts, then resolve)
+    s = resolveAway(s, { type: 'keep' });
+    const nextMorning = new Date(2026, 9, 15, 7, 30).getTime();
+    expect(isStaleDay(s, nextMorning)).toBe(true);
+    s = closeStaleDay(s);
+    expect(s.status).toBe('review');
+    expect(itemTotals(s, nextMorning).a).toBe(8 * 60 * MIN);
+  });
+  it('a day without items is not stale (nothing to send)', () => {
+    expect(isStaleDay(createDay('u1', T0), new Date(2026, 9, 15, 9, 0).getTime())).toBe(false);
+  });
+  it('today is not stale', () => {
+    expect(isStaleDay(dayWith('a'), T0 + 60 * MIN)).toBe(false);
+  });
+});
+
+describe('draftToTimerItem', () => {
+  const project = { id: 'p1', name: 'Gedung', project_code: 'PRJ-1', description: '', is_active: true, inactive_from: null };
+  it('captures the project name and code', () => {
+    expect(draftToTimerItem({ ...newEntryDraft(), project_id: 'p1' }, project, 'i1')).toMatchObject({ id: 'i1', label: 'Gedung', code: 'PRJ-1', project_id: 'p1' });
+  });
+  it('labels manual projects and quotations', () => {
+    expect(draftToTimerItem({ ...newEntryDraft(), custom_name: ' Survey ', custom_code: 'S1' }, undefined, 'i2')).toMatchObject({ label: 'Survey', code: 'S1', project_id: null });
+    expect(draftToTimerItem({ ...newEntryDraft(), category: 'quotation', description: 'Pabrik' }, undefined, 'i3')).toMatchObject({ label: 'Quotation: Pabrik', code: '' });
+  });
+});
+
+describe('storage', () => {
+  it('round-trips the state per user', () => {
+    const storage = new MemoryStorage();
+    const s = switchTo(dayWith('a'), 'a', T0);
+    expect(saveState(storage, s)).toBe(true);
+    expect(loadState(storage, 'u1')).toEqual(s);
+    expect(storage.data.has(storageKey('u1'))).toBe(true);
+    clearState(storage, 'u1');
+    expect(loadState(storage, 'u1')).toBeNull();
+  });
+  it('loadState rejects corrupt JSON, other versions and other users', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(storageKey('u1'), '{not json');
+    expect(loadState(storage, 'u1')).toBeNull();
+    storage.setItem(storageKey('u1'), JSON.stringify({ ...dayWith('a'), version: 2 }));
+    expect(loadState(storage, 'u1')).toBeNull();
+    storage.setItem(storageKey('u1'), JSON.stringify({ ...dayWith('a'), userId: 'someone-else' }));
+    expect(loadState(storage, 'u1')).toBeNull();
+    storage.setItem(storageKey('u1'), JSON.stringify({ ...dayWith('a'), segments: 'x' }));
+    expect(loadState(storage, 'u1')).toBeNull();
+  });
+  it('storage errors do not throw', () => {
+    const broken = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('full'); }, removeItem() { throw new Error('denied'); } };
+    expect(loadState(broken, 'u1')).toBeNull();
+    expect(saveState(broken, dayWith('a'))).toBe(false);
+    expect(() => clearState(broken, 'u1')).not.toThrow();
+  });
+});
+
+describe('tab ownership', () => {
+  it('a tab owns the timer when nobody else holds a fresh lock', () => {
+    expect(canOwn(null, 't1', T0)).toBe(true);
+    expect(canOwn({ tabId: 't1', at: T0 }, 't1', T0 + 1)).toBe(true);
+    expect(canOwn({ tabId: 't2', at: T0 }, 't1', T0 + HEARTBEAT_MS)).toBe(false);
+    expect(canOwn({ tabId: 't2', at: T0 }, 't1', T0 + 2 * HEARTBEAT_MS + 1)).toBe(true);
+  });
+  it('releaseOwner only removes our own lock', () => {
+    const storage = new MemoryStorage();
+    writeOwner(storage, { tabId: 't2', at: T0 });
+    releaseOwner(storage, 't1');
+    expect(readOwner(storage)).toEqual({ tabId: 't2', at: T0 });
+    releaseOwner(storage, 't2');
+    expect(readOwner(storage)).toBeNull();
   });
 });
