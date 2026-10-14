@@ -15,6 +15,7 @@ import {
   type EntryDraft, type Project, type WorkCategory, type WorkLog,
 } from '@/lib/worklog';
 import { EntryFields } from '@/components/EntryFields';
+import { DayTimerPanel } from '@/components/DayTimerPanel';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Lang = 'id' | 'en';
@@ -82,6 +83,15 @@ const text = {
     replaceHint: 'Tanggal ini sudah tercatat. Menyimpan akan mengganti pencatatan sebelumnya.', noLogs: 'Belum ada pencatatan',
     kategori: 'Kategori', deskripsi: 'Deskripsi (opsional)', deskripsiHeader: 'Deskripsi',
     descQuotation: 'Nama proyek quotation', descTraining: 'Topik training',
+    timerToday: 'Timer hari ini', startDay: 'Mulai hari', startDaySub: 'Catat waktu kerja secara langsung',
+    pauseTimer: 'Pause', resumeTimer: 'Lanjut', popOut: 'Pop out', finishDay: 'Selesai & kirim',
+    addTimerItem: '+ Tambah', add: 'Tambah', totalToday: 'Total hari ini',
+    timerLocalNote: 'Timer tersimpan di PC ini sampai dikirim. Kirim setiap akhir hari.',
+    timerOtherWindow: 'Timer sedang berjalan di jendela lain.',
+    timerStaleDay: 'Hari {date} belum dikirim. Periksa lalu kirim.',
+    noTimerItems: 'Belum ada item. Tambahkan proyek untuk mulai.',
+    awayMessage: 'Kamu tidak aktif {min} menit saat {item} berjalan.',
+    awayKeep: 'Tetap di {item}', awayMove: 'Pindah ke item lain…', awayDiscard: 'Buang', awayMoveTo: 'Pindahkan',
   },
   en: {
     app: 'Weave', login: 'Sign in', email: 'Email', password: 'Password',
@@ -131,6 +141,15 @@ const text = {
     replaceHint: 'This date already has entries. Saving will replace them.', noLogs: 'No entries yet',
     kategori: 'Category', deskripsi: 'Description (optional)', deskripsiHeader: 'Description',
     descQuotation: 'Quotation project name', descTraining: 'Training topic',
+    timerToday: "Today's timer", startDay: 'Start day', startDaySub: 'Track your work time live',
+    pauseTimer: 'Pause', resumeTimer: 'Resume', popOut: 'Pop out', finishDay: 'Finish & send',
+    addTimerItem: '+ Add', add: 'Add', totalToday: 'Total today',
+    timerLocalNote: 'The timer is stored on this PC until sent. Send it at the end of each day.',
+    timerOtherWindow: 'The timer is running in another window.',
+    timerStaleDay: '{date} has not been sent yet. Review and send it.',
+    noTimerItems: 'No items yet. Add a project to start.',
+    awayMessage: 'You were away {min} min while {item} was running.',
+    awayKeep: 'Keep on {item}', awayMove: 'Move to another item…', awayDiscard: 'Discard', awayMoveTo: 'Move',
   }
 } as const;
 
@@ -1002,6 +1021,8 @@ function UserView({ t, lang, profile, projects, workLogs, hasV4Schema, onRefresh
       </div>
 
       <div className="worklog-column">
+        <DayTimerPanel t={t} lang={lang} userId={profile.id} projects={projects} hasV4Schema={hasV4Schema}
+          workLogs={workLogs} onSent={onRefresh} />
         {!formOpen ? (
           <button className="worklog-cta" onClick={() => openForm(todayStr())}>
             <span className="worklog-cta-title">{t.logWork}</span>
