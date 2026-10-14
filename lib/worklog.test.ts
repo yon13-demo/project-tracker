@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildWorkLogInserts, draftToEntry, isDraftReady, isLeaveDate, mergeSameProject, newEntryDraft, saveDay, workLogToExistingEntry, type EntryInput } from './worklog';
+import { buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, mergeSameProject, newEntryDraft, saveDay, workLogToExistingEntry, type EntryInput } from './worklog';
 
 const entry = (patch: Partial<EntryInput>): EntryInput => ({
   category: 'project', project_id: null, custom_name: '', custom_code: '', description: '', hours: 1, ...patch,
@@ -125,5 +125,33 @@ describe('isLeaveDate (I7)', () => {
     expect(isLeaveDate([{ ...base, log_date: 'd1', is_leave: true }], 'd1')).toBe(true);
     expect(isLeaveDate([{ ...base, log_date: 'd1', is_leave: true }], 'd2')).toBe(false);
     expect(isLeaveDate([{ ...base, log_date: 'd1', is_leave: false }], 'd1')).toBe(false);
+  });
+});
+
+describe('groupLogsByProject (Per proyek view)', () => {
+  const log = (patch: Record<string, unknown>) => ({ id: String(Math.random()), user_id: 'u', log_date: '2026-10-14', project_id: null, hours: 1, is_leave: false, ...patch }) as any;
+  const gedung = { project_id: 'p1', projects: { name: 'Gedung', project_code: 'PRJ-1' } };
+
+  it('groups by project, newest work first, with days newest first and totals', () => {
+    const groups = groupLogsByProject([
+      log({ ...gedung, log_date: '2026-10-10', hours: 4 }),
+      log({ category: 'quotation', description: 'Pabrik', log_date: '2026-10-12', hours: 2 }),
+      log({ ...gedung, log_date: '2026-10-13', hours: 3, description: 'review' }),
+      log({ is_leave: true, log_date: '2026-10-11', hours: null }),
+    ]);
+    expect(groups.map(g => [g.label, g.code, g.totalHours, g.days.map(d => [d.date, d.hours])])).toEqual([
+      ['Gedung', 'PRJ-1', 7, [['2026-10-13', 3], ['2026-10-10', 4]]],
+      ['Quotation: Pabrik', '', 2, [['2026-10-12', 2]]],
+    ]);
+    expect(groups[0].days[0].description).toBe('review');
+  });
+
+  it('keeps manual projects and different trainings apart', () => {
+    const groups = groupLogsByProject([
+      log({ custom_project_name: 'Survey', hours: 1 }),
+      log({ category: 'training', description: 'K3', hours: 1 }),
+      log({ category: 'training', description: 'Excel', hours: 2 }),
+    ]);
+    expect(groups.map(g => g.label).sort()).toEqual(['Survey', 'Training: Excel', 'Training: K3']);
   });
 });
