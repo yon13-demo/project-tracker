@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildWorkLogInserts, draftToEntry, isDraftReady, newEntryDraft, workLogToExistingEntry, type EntryInput } from './worklog';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { buildWorkLogInserts, draftToEntry, isDraftReady, isLeaveDate, mergeSameProject, newEntryDraft, saveDay, workLogToExistingEntry, type EntryInput } from './worklog';
 
 const entry = (patch: Partial<EntryInput>): EntryInput => ({
   category: 'project', project_id: null, custom_name: '', custom_code: '', description: '', hours: 1, ...patch,
@@ -67,5 +68,62 @@ describe('workLogToExistingEntry', () => {
       id: '1', user_id: 'u', log_date: 'd', project_id: 'p1', hours: 4, is_leave: false, projects: { name: 'Gedung', project_code: 'PRJ-1' },
     });
     expect(e).toMatchObject({ category: 'project', project_id: 'p1', label: 'Gedung', code: 'PRJ-1', hours: 4 });
+  });
+});
+
+function fakeClient(opts: { existing?: { id: string }[]; insertError?: string } = {}) {
+  const calls: string[] = [];
+  let inserts = 0;
+  const client = {
+    from: () => ({
+      select: () => ({ eq: () => ({ eq: async () => { calls.push('select'); return { data: opts.existing ?? [], error: null }; } }) }),
+      delete: () => ({ eq: () => ({ eq: async () => { calls.push('delete'); return { error: null }; } }) }),
+      insert: async (rows: unknown[]) => {
+        inserts += 1;
+        calls.push(inserts === 1 ? `insert:${rows.length}` : `restore:${rows.length}`);
+        return { error: inserts === 1 && opts.insertError ? { message: opts.insertError } : null };
+      },
+    }),
+  };
+  return { client: client as unknown as SupabaseClient, calls };
+}
+
+describe('saveDay (I8: never lose the day on a failed insert)', () => {
+  it('snapshots, deletes and inserts', async () => {
+    const { client, calls } = fakeClient({ existing: [{ id: 'a' }, { id: 'b' }] });
+    expect(await saveDay(client, 'u', 'd', [entry({ project_id: 'p1' })], true)).toEqual({ error: null });
+    expect(calls).toEqual(['select', 'delete', 'insert:1']);
+  });
+  it('puts the old rows back when the insert fails', async () => {
+    const { client, calls } = fakeClient({ existing: [{ id: 'a' }], insertError: 'RLS' });
+    expect(await saveDay(client, 'u', 'd', [entry({ project_id: 'p1' })], true)).toEqual({ error: 'RLS' });
+    expect(calls).toEqual(['select', 'delete', 'insert:1', 'restore:1']);
+  });
+  it('an empty list just clears the day', async () => {
+    const { client, calls } = fakeClient({ existing: [{ id: 'a' }] });
+    await saveDay(client, 'u', 'd', [], true);
+    expect(calls).toEqual(['select', 'delete']);
+  });
+});
+
+describe('mergeSameProject (unique user/date/project constraint)', () => {
+  it('sums hours and joins descriptions for the same linked project', () => {
+    expect(mergeSameProject([
+      entry({ project_id: 'p1', hours: 2, description: 'gambar' }),
+      entry({ category: 'training', hours: 1 }),
+      entry({ project_id: 'p1', hours: 1.5, description: 'rapat' }),
+    ])).toEqual([
+      entry({ project_id: 'p1', hours: 3.5, description: 'gambar; rapat' }),
+      entry({ category: 'training', hours: 1 }),
+    ]);
+  });
+});
+
+describe('isLeaveDate (I7)', () => {
+  it('finds a leave row for the date', () => {
+    const base = { id: '1', user_id: 'u', project_id: null, hours: null };
+    expect(isLeaveDate([{ ...base, log_date: 'd1', is_leave: true }], 'd1')).toBe(true);
+    expect(isLeaveDate([{ ...base, log_date: 'd1', is_leave: true }], 'd2')).toBe(false);
+    expect(isLeaveDate([{ ...base, log_date: 'd1', is_leave: false }], 'd1')).toBe(false);
   });
 });

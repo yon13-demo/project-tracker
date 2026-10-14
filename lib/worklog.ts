@@ -55,13 +55,37 @@ export function buildWorkLogInserts(userId: string, date: string, entries: Entry
   }));
 }
 
+// work_logs is unique per (user, date, project): one row per linked project per day.
+export function mergeSameProject(entries: EntryInput[]): EntryInput[] {
+  const merged: EntryInput[] = [];
+  for (const e of entries) {
+    const same = e.category === 'project' && e.project_id
+      ? merged.find(m => m.category === 'project' && m.project_id === e.project_id)
+      : undefined;
+    if (!same) { merged.push({ ...e }); continue; }
+    same.hours += e.hours;
+    same.description = [same.description.trim(), e.description.trim()].filter(Boolean).join('; ');
+  }
+  return merged;
+}
+
 // Replaces every work-log row of the user on that date with `entries` (same as the form always did).
+// The old rows are snapshotted first and put back if the insert fails, so a failed save never empties the day.
 export async function saveDay(client: SupabaseClient, userId: string, date: string, entries: EntryInput[], hasV4Schema: boolean): Promise<{ error: string | null }> {
+  const old = await client.from('work_logs').select('*').eq('user_id', userId).eq('log_date', date);
+  if (old.error) return { error: old.error.message };
   const removed = await client.from('work_logs').delete().eq('user_id', userId).eq('log_date', date);
   if (removed.error) return { error: removed.error.message };
   if (!entries.length) return { error: null };
-  const { error } = await client.from('work_logs').insert(buildWorkLogInserts(userId, date, entries, hasV4Schema));
-  return { error: error?.message ?? null };
+  const { error } = await client.from('work_logs').insert(buildWorkLogInserts(userId, date, mergeSameProject(entries), hasV4Schema));
+  if (!error) return { error: null };
+  const previous = (old.data ?? []).map(({ profiles: _p, projects: _j, ...row }: Record<string, unknown>) => row);
+  if (previous.length) await client.from('work_logs').insert(previous);
+  return { error: error.message };
+}
+
+export function isLeaveDate(logs: WorkLog[], date: string): boolean {
+  return logs.some(w => w.log_date === date && w.is_leave);
 }
 
 export type ExistingEntry = EntryInput & { label: string; code: string };

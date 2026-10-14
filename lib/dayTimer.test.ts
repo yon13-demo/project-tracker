@@ -3,6 +3,7 @@ import {
   addItem, AWAY_THRESHOLD_MS, createDay, currentItemId, cutRange, dayTotal, detectAway, formatClock, itemTotals, localDateStr, markIdle,
   pause, resolveAway, resume, switchTo, tick,
   backToTimer, buildReviewRows, canOwn, clearState, closeStaleDay, draftToTimerItem, HEARTBEAT_MS, isStaleDay, loadState,
+  adoptStoredState, refreshExistingRows, rolloverDay,
   readOwner, releaseOwner, reviewRowsToEntries, roundToHalfHour, saveState, startReview, storageKey, writeOwner,
   type DayTimerState, type TimerItem,
 } from './dayTimer';
@@ -291,5 +292,91 @@ describe('tab ownership', () => {
     expect(readOwner(storage)).toEqual({ tabId: 't2', at: T0 });
     releaseOwner(storage, 't2');
     expect(readOwner(storage)).toBeNull();
+  });
+});
+
+describe('final review fixes', () => {
+  const nextMorning = new Date(2026, 9, 15, 7, 30).getTime();
+  const midnight = new Date(2026, 9, 15, 0, 0).getTime();
+
+  it('C3: rolloverDay closes a day left open overnight and sends it to review', () => {
+    let s = switchTo(dayWith('a'), 'a', T0);
+    s = { ...s, lastSeen: nextMorning - HEARTBEAT_MS }; // heartbeats ran all night
+    const r = rolloverDay(s, nextMorning);
+    expect(r.staleDate).toBe('2026-10-14');
+    expect(r.state?.status).toBe('review');
+    expect(r.state?.date).toBe('2026-10-14');
+    // a day cannot run past its own midnight
+    expect(itemTotals(r.state!, nextMorning).a).toBe(midnight - T0);
+  });
+
+  it('C3: rolloverDay leaves today alone', () => {
+    const s = switchTo(dayWith('a'), 'a', T0);
+    expect(rolloverDay(s, T0 + 60 * MIN)).toEqual({ state: s, staleDate: null });
+  });
+
+  it('I6: an old day without items is discarded', () => {
+    expect(rolloverDay(createDay('u1', T0), nextMorning)).toEqual({ state: null, staleDate: null });
+  });
+
+  it('I5: closing a stale day stops at an unanswered away prompt', () => {
+    let s = tick(switchTo(dayWith('a'), 'a', T0), T0 + 3 * 60 * MIN); // prompt for 08:00–11:00
+    s = { ...s, lastSeen: T0 + 5 * 60 * MIN };
+    const closed = closeStaleDay(s);
+    expect(closed.pendingAway).toBeNull();
+    expect(itemTotals(closed, nextMorning).a).toBe(0);
+  });
+
+  it('I5: closing a stale day stops where the user went idle', () => {
+    let s = tick(switchTo(dayWith('a'), 'a', T0), T0 + 5 * MIN);
+    s = markIdle(s, T0 + 90 * MIN);
+    s = { ...s, lastSeen: T0 + 10 * 60 * MIN };
+    expect(itemTotals(closeStaleDay(s), nextMorning).a).toBe(90 * MIN);
+  });
+
+  it('I4: a new gap while a prompt is open extends the prompt instead of counting silently', () => {
+    let s = tick(switchTo(dayWith('a'), 'a', T0), T0 + 40 * MIN); // prompt 08:00–08:40
+    s = tick(s, T0 + 41 * MIN);                                   // heartbeat while prompt shows
+    s = tick(s, T0 + 5 * 60 * MIN);                               // lid closed again, wakes 13:00
+    expect(s.pendingAway).toEqual({ start: T0, end: T0 + 5 * 60 * MIN, itemId: 'a' });
+    s = resolveAway(s, { type: 'discard' });
+    expect(itemTotals(s, T0 + 5 * 60 * MIN).a).toBe(0);
+  });
+
+  it('M1: loadState rejects malformed segments and items instead of crashing later', () => {
+    const storage = new MemoryStorage();
+    const bad = [
+      { ...dayWith('a'), segments: [null] },
+      { ...dayWith('a'), segments: [{ itemId: 'a', start: 'x', end: null }] },
+      { ...dayWith('a'), segments: [{ itemId: 'a', start: 1 }] },
+      { ...dayWith('a'), items: [null] },
+      { ...dayWith('a'), status: 'weird' },
+      { ...dayWith('a'), lastSeen: 'yesterday' },
+    ];
+    for (const value of bad) {
+      storage.setItem(storageKey('u1'), JSON.stringify(value));
+      expect(loadState(storage, 'u1')).toBeNull();
+    }
+  });
+
+  it('C1: adoptStoredState reads the newest stored day, rolled over and gap-checked', () => {
+    const storage = new MemoryStorage();
+    const newer = switchTo(dayWith('a', 'b'), 'b', T0 + 60 * MIN);
+    saveState(storage, newer);
+    expect(adoptStoredState(storage, 'u1', T0 + 61 * MIN)).toEqual({ state: { ...newer, lastSeen: T0 + 61 * MIN }, staleDate: null });
+    expect(adoptStoredState(storage, 'u1', nextMorning).staleDate).toBe('2026-10-14');
+    expect(adoptStoredState(new MemoryStorage(), 'u1', T0)).toEqual({ state: null, staleDate: null });
+  });
+
+  it('C2: refreshExistingRows swaps in late-arriving logged rows and keeps timer rows', () => {
+    const s = startReview(switchTo(dayWith('a'), 'a', T0), T0 + 60 * MIN);
+    const rows = buildReviewRows(s, T0 + 60 * MIN, []);
+    rows[0] = { ...rows[0], hours: 2 }; // user edited the timer row
+    const logged = [{ category: 'training' as const, project_id: null, custom_name: '', custom_code: '', description: 'K3', hours: 2, label: 'Training: K3', code: '' }];
+    const refreshed = refreshExistingRows(rows, logged);
+    expect(refreshed.map(r => [r.source, r.label, r.hours])).toEqual([
+      ['existing', 'Training: K3', 2],
+      ['timer', 'Item a', 2],
+    ]);
   });
 });

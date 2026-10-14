@@ -106,10 +106,16 @@ export function markIdle(state: DayTimerState, since: number): DayTimerState {
 
 // Call when the user is active again and when the app loads.
 export function detectAway(state: DayTimerState, now: number): DayTimerState {
-  if (state.status !== 'running' || state.pendingAway) return { ...state, idleSince: null, lastSeen: now };
+  if (state.status !== 'running') return { ...state, idleSince: null, lastSeen: now };
   const open = state.segments.find(s => s.end === null);
   // Heartbeats pause while the user is idle, so an idle mark wins over a stale lastSeen.
   const gapStart = state.idleSince ?? (now - state.lastSeen >= AWAY_THRESHOLD_MS ? state.lastSeen : null);
+  if (state.pendingAway) {
+    // Another long gap while the prompt is still open: grow the prompt instead of counting silently.
+    const grows = gapStart !== null && now - gapStart >= AWAY_THRESHOLD_MS;
+    const pendingAway = grows ? { ...state.pendingAway, end: now } : state.pendingAway;
+    return { ...state, pendingAway, idleSince: null, lastSeen: now };
+  }
   if (open && gapStart !== null) {
     const start = Math.max(gapStart, open.start);
     if (now - start >= AWAY_THRESHOLD_MS) {
@@ -166,9 +172,23 @@ export function isStaleDay(state: DayTimerState, now: number): boolean {
   return state.items.length > 0 && state.date !== localDateStr(now);
 }
 
-// A day left open overnight ends at its last sign of activity, then waits in review.
+function nextMidnight(date: string): number {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(y, m - 1, d + 1).getTime();
+}
+
+// A day left open overnight ends at its last sign of activity (never after an unanswered
+// away prompt, an idle mark, or its own midnight), then waits in review.
 export function closeStaleDay(state: DayTimerState): DayTimerState {
-  return { ...state, segments: closeOpen(state.segments, state.lastSeen), status: 'review', idleSince: null, pendingAway: null };
+  const closeAt = Math.min(state.lastSeen, state.pendingAway?.start ?? Infinity, state.idleSince ?? Infinity, nextMidnight(state.date));
+  return { ...state, segments: closeOpen(state.segments, closeAt), status: 'review', idleSince: null, pendingAway: null };
+}
+
+// Call on load, every heartbeat and when the user is active again.
+export function rolloverDay(state: DayTimerState, now: number): { state: DayTimerState | null; staleDate: string | null } {
+  if (state.date === localDateStr(now)) return { state, staleDate: null };
+  if (!state.items.length) return { state: null, staleDate: null };
+  return { state: state.status === 'review' ? state : closeStaleDay(state), staleDate: state.date };
 }
 
 export function roundToHalfHour(ms: number): number {
@@ -177,15 +197,22 @@ export function roundToHalfHour(ms: number): number {
 
 export type ReviewRow = ExistingEntry & { key: string; source: 'timer' | 'existing'; trackedMs: number | null };
 
+function existingRows(existing: ExistingEntry[]): ReviewRow[] {
+  return existing.map((e, i) => ({ ...e, key: `existing-${i}`, source: 'existing', trackedMs: null }));
+}
+
+export function refreshExistingRows(rows: ReviewRow[], existing: ExistingEntry[]): ReviewRow[] {
+  return [...existingRows(existing), ...rows.filter(r => r.source === 'timer')];
+}
+
 export function buildReviewRows(state: DayTimerState, now: number, existing: ExistingEntry[]): ReviewRow[] {
   const totals = itemTotals(state, now);
-  const existingRows: ReviewRow[] = existing.map((e, i) => ({ ...e, key: `existing-${i}`, source: 'existing', trackedMs: null }));
   const timerRows: ReviewRow[] = state.items.map(item => ({
     key: `timer-${item.id}`, source: 'timer', trackedMs: totals[item.id] ?? 0, hours: roundToHalfHour(totals[item.id] ?? 0),
     category: item.category, project_id: item.project_id, custom_name: item.custom_name, custom_code: item.custom_code,
     description: item.description, label: item.label, code: item.code,
   }));
-  return [...existingRows, ...timerRows];
+  return [...existingRows(existing), ...timerRows];
 }
 
 export function reviewRowsToEntries(rows: ReviewRow[]): EntryInput[] {
@@ -210,6 +237,17 @@ export function draftToTimerItem(d: EntryDraft, project: Project | undefined, id
   };
 }
 
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+
+function isValidState(v: unknown, userId: string): v is DayTimerState {
+  if (!isObj(v) || v.version !== 1 || v.userId !== userId || typeof v.date !== 'string' || typeof v.lastSeen !== 'number') return false;
+  if (!['running', 'paused', 'review'].includes(v.status as string)) return false;
+  if (!Array.isArray(v.items) || !v.items.every(i => isObj(i) && typeof i.id === 'string' && typeof i.label === 'string')) return false;
+  if (!Array.isArray(v.segments) || !v.segments.every(s => isObj(s) && typeof s.itemId === 'string' && typeof s.start === 'number'
+    && (s.end === null || typeof s.end === 'number'))) return false;
+  return (v.idleSince === null || typeof v.idleSince === 'number') && (v.pendingAway === null || isObj(v.pendingAway));
+}
+
 type ReadStorage = Pick<Storage, 'getItem'>;
 type WriteStorage = Pick<Storage, 'setItem'>;
 type RemoveStorage = Pick<Storage, 'removeItem'>;
@@ -221,8 +259,7 @@ export function loadState(storage: ReadStorage, userId: string): DayTimerState |
     const raw = storage.getItem(storageKey(userId));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed || parsed.version !== 1 || parsed.userId !== userId || !Array.isArray(parsed.items) || !Array.isArray(parsed.segments)) return null;
-    return parsed as DayTimerState;
+    return isValidState(parsed, userId) ? parsed : null;
   } catch {
     return null;
   }
@@ -259,4 +296,13 @@ export function writeOwner(storage: WriteStorage, record: OwnerRecord): void {
 export function releaseOwner(storage: ReadStorage & RemoveStorage, tabId: string): void {
   if (readOwner(storage)?.tabId !== tabId) return;
   try { storage.removeItem(OWNER_KEY); } catch { /* storage unavailable */ }
+}
+
+// The single way to take over the stored day: on load and whenever this tab becomes the owner.
+export function adoptStoredState(storage: ReadStorage, userId: string, now: number): { state: DayTimerState | null; staleDate: string | null } {
+  const stored = loadState(storage, userId);
+  if (!stored) return { state: null, staleDate: null };
+  const rolled = rolloverDay(stored, now);
+  if (rolled.state?.status === 'running') return { state: detectAway(rolled.state, now), staleDate: rolled.staleDate };
+  return rolled;
 }

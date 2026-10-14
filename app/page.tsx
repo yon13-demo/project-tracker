@@ -95,6 +95,7 @@ const text = {
     reviewTitle: 'Periksa & kirim', tracked: 'Timer', alreadyLogged: 'Sudah tercatat',
     backToTimer: 'Kembali ke timer', send: 'Kirim', daySent: 'Hari terkirim.', reviewTotal: 'Total jam',
     reviewZeroHint: 'Baris 0 jam tidak disimpan.',
+    reviewLeaveNotice: 'Tanggal ini tercatat sebagai cuti. Mengirim akan mengganti cuti dengan jam kerja ini.',
   },
   en: {
     app: 'Weave', login: 'Sign in', email: 'Email', password: 'Password',
@@ -156,6 +157,7 @@ const text = {
     reviewTitle: 'Review & send', tracked: 'Timer', alreadyLogged: 'Already logged',
     backToTimer: 'Back to timer', send: 'Send', daySent: 'Day sent.', reviewTotal: 'Total hours',
     reviewZeroHint: 'Rows with 0 hours are not saved.',
+    reviewLeaveNotice: 'This date is marked as leave. Sending will replace the leave with these work hours.',
   }
 } as const;
 
@@ -226,6 +228,7 @@ export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
+  const [logsLoaded, setLogsLoaded] = useState(false);
   const [hasV4Schema, setHasV4Schema] = useState(false);
   const [changePassOpen, setChangePassOpen] = useState(false);
   const [users, setUsers] = useState<Profile[]>([]);
@@ -367,6 +370,7 @@ export default function Home() {
 
     setProjects((allProjects || []) as Project[]);
     setWorkLogs(normalized as WorkLog[]);
+    setLogsLoaded(true);
     setUsers(enrichedUsers);
     setLoading(false);
   }, [configured]);
@@ -656,7 +660,7 @@ export default function Home() {
           currentProfile={profile}
         />
       ) : (
-        <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} hasV4Schema={hasV4Schema} onRefresh={load} />
+        <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} logsLoaded={logsLoaded} hasV4Schema={hasV4Schema} onRefresh={load} />
       )}
 
       {changePassOpen && <ChangePasswordModal t={t} lang={lang} onClose={() => setChangePassOpen(false)} />}
@@ -907,8 +911,8 @@ function formatCardDate(dateStr: string, lang: Lang): string {
   return formatted;
 }
 
-function UserView({ t, lang, profile, projects, workLogs, hasV4Schema, onRefresh }: {
-  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; hasV4Schema: boolean; onRefresh: () => void;
+function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schema, onRefresh }: {
+  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; logsLoaded: boolean; hasV4Schema: boolean; onRefresh: () => void;
 }) {
   const days = getLast45Days();
   const logsByDate = useMemo(() => {
@@ -1028,7 +1032,7 @@ function UserView({ t, lang, profile, projects, workLogs, hasV4Schema, onRefresh
 
       <div className="worklog-column">
         <DayTimerPanel t={t} lang={lang} userId={profile.id} projects={projects} hasV4Schema={hasV4Schema}
-          workLogs={workLogs} onSent={onRefresh} />
+          workLogs={workLogs} logsLoaded={logsLoaded} onSent={onRefresh} />
         {!formOpen ? (
           <button className="worklog-cta" onClick={() => openForm(todayStr())}>
             <span className="worklog-cta-title">{t.logWork}</span>

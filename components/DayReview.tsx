@@ -1,19 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { buildReviewRows, formatClock, reviewRowsToEntries, type ReviewRow } from '@/lib/dayTimer';
+import { buildReviewRows, formatClock, refreshExistingRows, reviewRowsToEntries, type ReviewRow } from '@/lib/dayTimer';
 import { saveDay, type ExistingEntry } from '@/lib/worklog';
 import { supabase } from '@/lib/supabase';
 import { showAlert, showStatus } from '@/lib/notify';
 import type { DayTimer } from './useDayTimer';
 
-export function DayReview({ t, timer, existing, hasV4Schema, onSent }: {
-  t: any; timer: DayTimer; existing: ExistingEntry[]; hasV4Schema: boolean; onSent: () => void;
+export function DayReview({ t, timer, existing, logsLoaded, isLeave, hasV4Schema, onSent }: {
+  t: any; timer: DayTimer; existing: ExistingEntry[]; logsLoaded: boolean; isLeave: boolean; hasV4Schema: boolean; onSent: () => void;
 }) {
   const state = timer.state!;
   const [rows, setRows] = useState<ReviewRow[]>(() => buildReviewRows(state, Date.now(), existing));
   const [sending, setSending] = useState(false);
+  // Logged rows may arrive after the review opened (e.g. reopening the app straight into review).
+  const existingKey = existing.map(e => `${e.category}|${e.project_id}|${e.label}|${e.hours}|${e.description}`).join(';');
+  useEffect(() => { setRows(prev => refreshExistingRows(prev, existing)); }, [existingKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const total = rows.reduce((s, r) => s + (r.hours > 0 ? r.hours : 0), 0);
 
   function update(key: string, patch: Partial<ReviewRow>) {
@@ -36,6 +39,7 @@ export function DayReview({ t, timer, existing, hasV4Schema, onSent }: {
         <span className="worklog-section-label">{t.reviewTitle}</span>
         <span className="timer-total">{state.date}</span>
       </div>
+      {isLeave && <p className="timer-stale">{t.reviewLeaveNotice}</p>}
       <div className="review-list">
         {rows.map(r => (
           <div key={r.key} className={`review-row${r.hours > 0 ? '' : ' is-zero'}`}>
@@ -61,7 +65,7 @@ export function DayReview({ t, timer, existing, hasV4Schema, onSent }: {
       <p className="review-total">{t.reviewTotal}: {total} jam · {t.reviewZeroHint}</p>
       <div className="timer-actions timer-footer">
         <button className="btn-secondary" disabled={sending} onClick={timer.backToTimer}>{t.backToTimer}</button>
-        <button className="btn-primary" disabled={sending} onClick={() => void send()}>{sending ? '…' : t.send}</button>
+        <button className="btn-primary" disabled={sending || !logsLoaded} onClick={() => void send()}>{sending ? '…' : t.send}</button>
       </div>
     </div>
   );

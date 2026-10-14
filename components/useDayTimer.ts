@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  addItem as addItemFn, backToTimer as backToTimerFn, canOwn, closeStaleDay, createDay, detectAway, HEARTBEAT_MS,
-  IDLE_DETECTOR_THRESHOLD_MS, isStaleDay, loadState, markIdle, pause as pauseFn, readOwner, releaseOwner,
+  adoptStoredState, rolloverDay, addItem as addItemFn, backToTimer as backToTimerFn, canOwn, createDay, detectAway, HEARTBEAT_MS,
+  IDLE_DETECTOR_THRESHOLD_MS, markIdle, pause as pauseFn, readOwner, releaseOwner,
   resolveAway as resolveAwayFn, resume as resumeFn, saveState, clearState, startReview as startReviewFn,
   switchTo as switchToFn, tick, writeOwner, type AwayChoice, type DayTimerState, type TimerItem,
 } from '@/lib/dayTimer';
@@ -25,29 +25,32 @@ export function useDayTimer(userId: string) {
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
   const [tabId] = useState(() => crypto.randomUUID());
   const idleAbort = useRef<AbortController | null>(null);
+  const ownerRef = useRef(false);
+  const stateRef = useRef<DayTimerState | null>(null);
+  stateRef.current = state;
 
-  // Load once per user; close a day left open overnight, and catch gaps while the app was closed.
-  useEffect(() => {
-    const t = Date.now();
-    let s = loadState(window.localStorage, userId);
-    if (s && isStaleDay(s, t)) { setStaleNotice(s.date); s = closeStaleDay(s); }
-    else if (s) s = detectAway(s, t);
-    setState(s);
-    setLoaded(true);
-  }, [userId]);
-
-  // Persist every change made by the owning tab.
+  // Persist every change made by the owning tab, but only after it has adopted the stored day.
   useEffect(() => {
     if (!loaded || !isOwner) return;
     if (state) saveState(window.localStorage, state);
     else clearState(window.localStorage, userId);
   }, [state, loaded, isOwner, userId]);
 
-  // Single owner across tabs; other tabs show a read-only notice.
+  // Single owner across tabs; other tabs show a read-only notice. Becoming the owner always
+  // re-reads storage first, so an old in-memory copy can never overwrite newer work.
   useEffect(() => {
     const claim = () => {
-      const ok = canOwn(readOwner(window.localStorage), tabId, Date.now());
-      if (ok) writeOwner(window.localStorage, { tabId, at: Date.now() });
+      const t = Date.now();
+      const ok = canOwn(readOwner(window.localStorage), tabId, t);
+      if (ok) writeOwner(window.localStorage, { tabId, at: t });
+      if (ok && !ownerRef.current) {
+        const adopted = adoptStoredState(window.localStorage, userId, t);
+        setState(adopted.state);
+        setStaleNotice(adopted.staleDate);
+        setLoaded(true);
+      }
+      if (!ok) setLoaded(false);
+      ownerRef.current = ok;
       setIsOwner(ok);
     };
     const release = () => releaseOwner(window.localStorage, tabId);
@@ -55,14 +58,22 @@ export function useDayTimer(userId: string) {
     const id = window.setInterval(claim, HEARTBEAT_MS);
     window.addEventListener('pagehide', release);
     return () => { window.clearInterval(id); window.removeEventListener('pagehide', release); release(); };
-  }, [tabId]);
+  }, [tabId, userId]);
 
-  // Clock for display (1 s) and heartbeat (every HEARTBEAT_MS of state.lastSeen).
+  // Clock for display (1 s), day rollover after midnight, and heartbeat (every HEARTBEAT_MS of state.lastSeen).
   useEffect(() => {
     const id = window.setInterval(() => {
       const t = Date.now();
       setNow(t);
-      if (isOwner) setState(s => (s && t - s.lastSeen >= HEARTBEAT_MS ? tick(s, t) : s));
+      const s = stateRef.current;
+      if (!isOwner || !s) return;
+      const rolled = rolloverDay(s, t);
+      if (rolled.state !== s) {
+        setState(rolled.state);
+        if (rolled.staleDate) setStaleNotice(rolled.staleDate);
+      } else if (t - s.lastSeen >= HEARTBEAT_MS) {
+        setState(tick(s, t));
+      }
     }, 1000);
     return () => window.clearInterval(id);
   }, [isOwner]);

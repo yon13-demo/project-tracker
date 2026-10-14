@@ -6,10 +6,10 @@ import { useDayTimer } from './useDayTimer';
 import { usePipWindow } from './usePipWindow';
 import { TimerBody } from './TimerBody';
 import { DayReview } from './DayReview';
-import { workLogToExistingEntry, type Project, type WorkLog } from '@/lib/worklog';
+import { isLeaveDate, workLogToExistingEntry, type Project, type WorkLog } from '@/lib/worklog';
 
-export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs, onSent }: {
-  t: any; lang: 'id' | 'en'; userId: string; projects: Project[]; hasV4Schema: boolean; workLogs: WorkLog[]; onSent: () => void;
+export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs, logsLoaded, onSent }: {
+  t: any; lang: 'id' | 'en'; userId: string; projects: Project[]; hasV4Schema: boolean; workLogs: WorkLog[]; logsLoaded: boolean; onSent: () => void;
 }) {
   const timer = useDayTimer(userId);
   const pip = usePipWindow();
@@ -33,7 +33,8 @@ export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs
     return (
       <>
         {timer.staleNotice && <p className="timer-stale">{t.timerStaleDay.replace('{date}', timer.staleNotice)}</p>}
-        <DayReview t={t} timer={timer} existing={existing} hasV4Schema={hasV4Schema} onSent={onSent} />
+        <DayReview t={t} timer={timer} existing={existing} logsLoaded={logsLoaded} isLeave={isLeaveDate(workLogs, state.date)}
+          hasV4Schema={hasV4Schema} onSent={onSent} />
       </>
     );
   }
