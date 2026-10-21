@@ -16,6 +16,11 @@ import {
 } from '@/lib/worklog';
 import { EntryFields } from '@/components/EntryFields';
 import { DayTimerPanel } from '@/components/DayTimerPanel';
+import { ClampedText } from '@/components/ClampedText';
+import { ScreenshotStrip } from '@/components/ScreenshotStrip';
+import { AdminShotsButton } from '@/components/AdminShotsButton';
+import { useScreenshots } from '@/components/useScreenshots';
+import { entryKey } from '@/lib/screenshots';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Lang = 'id' | 'en';
@@ -96,6 +101,9 @@ const text = {
     backToTimer: 'Kembali ke timer', send: 'Kirim', daySent: 'Hari terkirim.', reviewTotal: 'Total jam',
     reviewZeroHint: 'Baris 0 jam tidak disimpan.',
     inDevelopment: 'Dalam pengembangan', expand: 'Buka', collapse: 'Ciutkan',
+    showMore: 'Lihat selengkapnya', showLess: 'Tutup', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshot',
+    pasteHint: 'Klik, tempel (Ctrl+V) atau seret gambar ke sini', pickProjectFirst: 'Pilih proyek dulu untuk menambah screenshot.',
+    maxScreenshots: 'Maksimal 5 screenshot per entri.', noScreenshots: 'Tidak ada screenshot.',
     viewByDay: 'Per hari', viewByProject: 'Per proyek', daysCount: 'hari', totalLabel: 'Total',
     reviewLeaveNotice: 'Tanggal ini tercatat sebagai cuti. Mengirim akan mengganti cuti dengan jam kerja ini.',
   },
@@ -160,6 +168,9 @@ const text = {
     backToTimer: 'Back to timer', send: 'Send', daySent: 'Day sent.', reviewTotal: 'Total hours',
     reviewZeroHint: 'Rows with 0 hours are not saved.',
     inDevelopment: 'In development', expand: 'Expand', collapse: 'Collapse',
+    showMore: 'Show more', showLess: 'Show less', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshots',
+    pasteHint: 'Click, paste (Ctrl+V) or drop an image here', pickProjectFirst: 'Choose the project first to add screenshots.',
+    maxScreenshots: 'Up to 5 screenshots per entry.', noScreenshots: 'No screenshots.',
     viewByDay: 'By day', viewByProject: 'By project', daysCount: 'days', totalLabel: 'Total',
     reviewLeaveNotice: 'This date is marked as leave. Sending will replace the leave with these work hours.',
   }
@@ -952,6 +963,12 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
   const [isLeaveMode, setIsLeaveMode] = useState(false);
   const addEntryRef = useRef<HTMLButtonElement>(null);
   const [addedEntryId, setAddedEntryId] = useState<string | null>(null);
+  const shotDates = useMemo(
+    () => [...new Set([...Object.keys(logsByDate).filter(d => days.includes(d)), ...(formOpen ? [selectedDate] : [])])].sort(),
+    [logsByDate, formOpen, selectedDate], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const shotsApi = useScreenshots(shotDates, showAlert, t.maxScreenshots);
+  const keyOfEntry = (e: DayEntry) => entryKey({ category: e.category, project_id: e.project_id, custom_name: e.manual ? e.project_name : '', description: e.description });
 
   // After "Tambah Proyek", bring the new row into view and put the cursor in its project field.
   useEffect(() => {
@@ -965,7 +982,8 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
     setSaving(true);
     const { error } = await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', date);
     setSaving(false);
-    if (error) showAlert(error.message); else onRefresh();
+    if (error) showAlert(error.message);
+    else { void shotsApi.removeDay(date); onRefresh(); }
   }
 
   function loadDate(date: string) {
@@ -1071,8 +1089,20 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
               <div className="worklog-entries">
                 {dateEntries.map(entry => (
                   <div key={entry.tempId} className="entry-row" data-entry-id={entry.tempId}>
-                    <EntryFields t={t} entry={entry} projects={projects} hasV4Schema={hasV4Schema}
-                      onChange={patch => updateEntry(entry.tempId, patch)} />
+                    {(() => {
+                      const ready = isDraftReady(entry, { requireHours: false });
+                      const key = ready ? entryKey(entry) : '';
+                      const upload = (files: File[]) => void shotsApi.upload(selectedDate, key, files);
+                      return (
+                        <EntryFields t={t} entry={entry} projects={projects} hasV4Schema={hasV4Schema}
+                          onChange={patch => updateEntry(entry.tempId, patch)}
+                          onPasteFiles={ready ? upload : undefined}
+                          extra={ready
+                            ? <ScreenshotStrip t={t} shots={shotsApi.shots[selectedDate]?.[key] ?? []} onAdd={upload}
+                                onRemove={path => void shotsApi.remove(path)} busy={shotsApi.busy === `${selectedDate}/${key}`} />
+                            : <p className="shot-hint">{t.pickProjectFirst}</p>} />
+                      );
+                    })()}
                     {dateEntries.length > 1 && (
                       <button className="btn-remove-entry" onClick={() => removeEntry(entry.tempId)} title={t.delete}><X size={14} /></button>
                     )}
@@ -1131,8 +1161,12 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
                     <ul className="worklog-lines">
                       {day.entries.map((e, i) => (
                         <li key={i}>
-                          <span className="worklog-line-label">{entryLabel(e)}{e.category === 'project' && e.project_code && <span className="code-badge">{e.project_code}</span>}</span>
-                          <span className="worklog-line-hours">{e.hours} jam</span>
+                          <div className="worklog-line-main">
+                            <span className="worklog-line-label">{entryLabel(e)}{e.category === 'project' && e.project_code && <span className="code-badge">{e.project_code}</span>}</span>
+                            <span className="worklog-line-hours">{e.hours} jam</span>
+                          </div>
+                          {e.category === 'project' && <ClampedText t={t} text={e.description} />}
+                          <ScreenshotStrip t={t} shots={shotsApi.shots[date]?.[keyOfEntry(e)] ?? []} />
                         </li>
                       ))}
                     </ul>
@@ -1170,11 +1204,14 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
                     <ul className="worklog-lines project-group-days">
                       {g.days.map(d => (
                         <li key={d.date}>
-                          {days.includes(d.date)
-                            ? <button className="link-button" onClick={() => openForm(d.date)}>{formatCardDate(d.date, lang)}</button>
-                            : <span>{formatCardDate(d.date, lang)}</span>}
-                          {d.description && <span className="worklog-line-desc">{d.description}</span>}
-                          <span className="worklog-line-hours">{d.hours} jam</span>
+                          <div className="worklog-line-main">
+                            {days.includes(d.date)
+                              ? <button className="link-button" onClick={() => openForm(d.date)}>{formatCardDate(d.date, lang)}</button>
+                              : <span>{formatCardDate(d.date, lang)}</span>}
+                            <span className="worklog-line-hours">{d.hours} jam</span>
+                          </div>
+                          <ClampedText t={t} text={d.description} />
+                          <ScreenshotStrip t={t} shots={shotsApi.shots[d.date]?.[g.shotKey] ?? []} />
                         </li>
                       ))}
                     </ul>
@@ -1349,7 +1386,7 @@ function AdminView({
                   <td>{logProjectCode(r) ? <span className="code-badge">{logProjectCode(r)}</span> : <span className="code-placeholder">—</span>}</td>
                   <td className="td-desc">{r.description || <span className="code-placeholder">—</span>}</td>
                   <td>{r.log_date}</td>
-                  <td><span className="hours-badge">{r.hours} jam</span></td>
+                  <td><span className="admin-hours-cell"><span className="hours-badge">{r.hours} jam</span><AdminShotsButton t={t} log={r} /></span></td>
                 </tr>
               ))}
               {!records.length && <tr><td colSpan={7} className="td-empty">{t.noData}</td></tr>}
