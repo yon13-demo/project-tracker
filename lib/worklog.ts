@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { entryKey } from './screenshots';
 
 export type WorkCategory = 'project' | 'quotation' | 'training';
 export const WORK_CATEGORIES: WorkCategory[] = ['project', 'quotation', 'training'];
@@ -64,7 +65,7 @@ export function mergeSameProject(entries: EntryInput[]): EntryInput[] {
       : undefined;
     if (!same) { merged.push({ ...e }); continue; }
     same.hours += e.hours;
-    same.description = [same.description.trim(), e.description.trim()].filter(Boolean).join('; ');
+    same.description = [same.description.trim(), e.description.trim()].filter(Boolean).join('\n');
   }
   return merged;
 }
@@ -103,7 +104,7 @@ export function workLogToExistingEntry(w: WorkLog): ExistingEntry {
 }
 
 export type ProjectDay = { date: string; hours: number; description: string };
-export type ProjectGroup = { key: string; label: string; code: string; category: WorkCategory; totalHours: number; days: ProjectDay[] };
+export type ProjectGroup = { key: string; shotKey: string; label: string; code: string; category: WorkCategory; totalHours: number; days: ProjectDay[] };
 
 // "Per proyek" view: one group per project / quotation / training, the days spent on it newest first.
 export function groupLogsByProject(logs: WorkLog[]): ProjectGroup[] {
@@ -114,11 +115,11 @@ export function groupLogsByProject(logs: WorkLog[]): ProjectGroup[] {
     const key = e.category === 'project'
       ? e.project_id ?? `manual:${e.custom_name.toLowerCase()}`
       : `${e.category}:${e.description.toLowerCase()}`;
-    const group = groups.get(key) ?? { key, label: e.label, code: e.code, category: e.category, totalHours: 0, days: [] };
+    const group = groups.get(key) ?? { key, shotKey: entryKey(e), label: e.label, code: e.code, category: e.category, totalHours: 0, days: [] };
     const day = group.days.find(d => d.date === w.log_date);
     if (day) {
       day.hours += e.hours;
-      if (e.description && e.category === 'project') day.description = [day.description, e.description].filter(Boolean).join('; ');
+      if (e.description && e.category === 'project') day.description = [day.description, e.description].filter(Boolean).join('\n');
     } else {
       group.days.push({ date: w.log_date, hours: e.hours, description: e.category === 'project' ? e.description : '' });
     }

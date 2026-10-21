@@ -113,7 +113,7 @@ describe('mergeSameProject (unique user/date/project constraint)', () => {
       entry({ category: 'training', hours: 1 }),
       entry({ project_id: 'p1', hours: 1.5, description: 'rapat' }),
     ])).toEqual([
-      entry({ project_id: 'p1', hours: 3.5, description: 'gambar; rapat' }),
+      entry({ project_id: 'p1', hours: 3.5, description: 'gambar\nrapat' }),
       entry({ category: 'training', hours: 1 }),
     ]);
   });
@@ -153,5 +153,21 @@ describe('groupLogsByProject (Per proyek view)', () => {
       log({ category: 'training', description: 'Excel', hours: 2 }),
     ]);
     expect(groups.map(g => g.label).sort()).toEqual(['Survey', 'Training: Excel', 'Training: K3']);
+  });
+});
+
+describe('multi-line descriptions in the per-project view', () => {
+  it('joins two descriptions of the same project-day on separate lines', () => {
+    const log = (patch: Record<string, unknown>) => ({ id: String(Math.random()), user_id: 'u', log_date: '2026-10-14', project_id: 'p1', hours: 1, is_leave: false, projects: { name: 'G', project_code: 'P' }, ...patch }) as any;
+    const [g] = groupLogsByProject([log({ description: 'pagi' }), log({ description: 'sore' })]);
+    expect(g.days[0].description).toBe('pagi\nsore');
+  });
+});
+
+describe('per-project groups carry the screenshot key of their entry', () => {
+  it('uses the same key as the work-log form', () => {
+    const log = (patch: Record<string, unknown>) => ({ id: String(Math.random()), user_id: 'u', log_date: '2026-10-14', project_id: null, hours: 1, is_leave: false, ...patch }) as any;
+    const groups = groupLogsByProject([log({ custom_project_name: 'Survey Lokasi' }), log({ category: 'quotation', description: 'Pabrik' })]);
+    expect(groups.map(g => g.shotKey).sort()).toEqual(['m-survey-lokasi', 'q-pabrik']);
   });
 });
