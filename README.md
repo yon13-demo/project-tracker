@@ -23,6 +23,12 @@ Aplikasi ringan Next.js untuk Vercel dengan dua peran: **admin** dan **user**, s
 4. Daftarkan akun pertama dari aplikasi. Buka tabel `profiles` di Supabase, salin UUID akun tersebut, lalu jalankan baris `update` yang tersedia di bagian bawah `supabase/schema.sql` untuk menjadikannya admin.
 5. Push ke GitHub lalu import repository di Vercel. Tambahkan empat environment variables yang sama di Vercel. Vercel akan otomatis membaca `vercel.json` dan memanggil `/api/keep-alive` pukul 03:00 UTC setiap hari.
 
+### Absensi (opsional)
+
+Form pencatatan kerja menampilkan jam absen (clock-in → clock-out) dan cuti dari database absensi vendor untuk tanggal yang dipilih, lalu membandingkannya dengan jam yang sudah dicatat. Data absensi hanya dibaca, tidak pernah diubah. Karyawan dicocokkan lewat email login Weave dengan `employees.email`, `employees.work_email`, atau `employee_emails` di absensi.
+
+Tambahkan `ATTENDANCE_SUPABASE_URL` dan `ATTENDANCE_SUPABASE_KEY` (server-only, tanpa awalan `NEXT_PUBLIC_`) di `.env.local` dan Vercel. Tanpa keduanya, form tetap berjalan dan hanya menampilkan "Absensi tidak tersedia".
+
 Di panel Admin, `Pengaturan Admin` menyediakan pilihan metode login `Password`, `Microsoft`, atau `Keduanya`. Nama akun Microsoft diambil dari metadata `name`/`full_name` dan email berasal dari akun OAuth.
 
 ## Mengapa bukan SQLite?
