@@ -1,17 +1,12 @@
--- ⚠️ Jalankan di project Supabase ABSENSI (vendor), BUKAN di Supabase Weave.
--- Run in the ATTENDANCE Supabase project's SQL Editor, NOT in Weave's.
+-- RUN THIS IN THE ATTENDANCE SUPABASE PROJECT (SQL Editor), NOT IN WEAVE'S.
+-- Make sure no text is highlighted when you click Run, so the whole script runs.
 --
--- Gives Weave one narrow, read-only door into attendance:
---   public.weave_attendance_day(email, date, code) → clock times, hours and leave for ONE person on ONE date.
--- Weave calls it with the attendance project's anon/publishable key plus an access code.
--- The anon key alone cannot call it, and the code only unlocks this function — no tables, no salaries, no writes.
--- Safe to run again; existing data is not touched.
+-- Adds one read-only function Weave can call with the anon key plus an access code.
+-- It returns clock times, hours and leave for one person on one date. Nothing else.
+-- Safe to run again. Existing attendance data is not changed.
 --
--- After running this file:
---   1. Run:  select weave_private.rotate_code();
---      It returns the access code ONCE. Give it to whoever sets Weave's Vercel variables (ATTENDANCE_ACCESS_CODE).
---      Running it again creates a new code and the old one stops working immediately (use it if the code leaks).
---   2. To switch Weave off completely:  drop function public.weave_attendance_day(text, date, text);
+-- Afterwards, in a new query, get the access code with:  select weave_private.rotate_code();
+-- See README section "Absensi" for rotating the code or switching Weave off.
 
 create schema if not exists weave_private;
 revoke all on schema weave_private from public, anon, authenticated;

@@ -31,6 +31,7 @@ Form pencatatan kerja menampilkan jam absen (clock-in → clock-out) dan cuti da
 2. Di `.env.local` dan Vercel (Production dan Preview), isi `ATTENDANCE_SUPABASE_URL`, `ATTENDANCE_SUPABASE_ANON_KEY` (anon/publishable key project absensi), dan `ATTENDANCE_ACCESS_CODE`. Semuanya server-only, tanpa awalan `NEXT_PUBLIC_`.
 
 Tanpa variabel ini form tetap berjalan dan hanya menampilkan "Absensi tidak tersedia". Jika kode bocor, jalankan `rotate_code()` lagi; kode lama langsung tidak berlaku.
+Untuk memutus akses Weave sepenuhnya, jalankan di Supabase absensi: `drop function public.weave_attendance_day(text, date, text);`
 
 Di panel Admin, `Pengaturan Admin` menyediakan pilihan metode login `Password`, `Microsoft`, atau `Keduanya`. Nama akun Microsoft diambil dari metadata `name`/`full_name` dan email berasal dari akun OAuth.
 
