@@ -22,6 +22,7 @@ import { ScreenshotStrip } from '@/components/ScreenshotStrip';
 import { AttendanceBar } from '@/components/AttendanceBar';
 import { leaveLabel } from '@/lib/attendance';
 import { RecordsTable } from '@/components/RecordsTable';
+import { EmployeeList, ProjectList } from '@/components/AdminLists';
 import { useScreenshots } from '@/components/useScreenshots';
 import { entryKey } from '@/lib/screenshots';
 
@@ -104,7 +105,7 @@ const text = {
     backToTimer: 'Kembali ke timer', send: 'Kirim', daySent: 'Hari terkirim.', reviewTotal: 'Total jam',
     reviewZeroHint: 'Baris 0 jam tidak disimpan.',
     inDevelopment: 'Dalam pengembangan', expand: 'Buka', collapse: 'Ciutkan',
-    showMore: 'Lihat selengkapnya', showLess: 'Tutup', noDescription: 'Tanpa deskripsi', entriesCount: 'entri', showMoreRows: 'Tampilkan lagi', ofTotal: 'dari', projectCol: 'Proyek', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshot',
+    showMore: 'Lihat selengkapnya', showLess: 'Tutup', noDescription: 'Tanpa deskripsi', entriesCount: 'entri', showMoreRows: 'Tampilkan lagi', ofTotal: 'dari', projectCol: 'Proyek', projectsCount: 'proyek', peopleCount: 'orang', searchProject: 'Cari nomor, nama atau perusahaan…', searchPerson: 'Cari nama atau email…', you: 'Anda', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshot',
     pasteHint: 'Klik, tempel (Ctrl+V) atau seret gambar ke sini', pickProjectFirst: 'Pilih proyek dulu untuk menambah screenshot.',
     maxScreenshots: 'Maksimal 5 screenshot per entri.', noScreenshots: 'Tidak ada screenshot.',
     viewByDay: 'Per hari', viewByProject: 'Per proyek', daysCount: 'hari', totalLabel: 'Total',
@@ -174,7 +175,7 @@ const text = {
     backToTimer: 'Back to timer', send: 'Send', daySent: 'Day sent.', reviewTotal: 'Total hours',
     reviewZeroHint: 'Rows with 0 hours are not saved.',
     inDevelopment: 'In development', expand: 'Expand', collapse: 'Collapse',
-    showMore: 'Show more', showLess: 'Show less', noDescription: 'No description', entriesCount: 'entries', showMoreRows: 'Show more', ofTotal: 'of', projectCol: 'Project', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshots',
+    showMore: 'Show more', showLess: 'Show less', noDescription: 'No description', entriesCount: 'entries', showMoreRows: 'Show more', ofTotal: 'of', projectCol: 'Project', projectsCount: 'projects', peopleCount: 'people', searchProject: 'Search number, name or company…', searchPerson: 'Search name or email…', you: 'you', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshots',
     pasteHint: 'Click, paste (Ctrl+V) or drop an image here', pickProjectFirst: 'Choose the project first to add screenshots.',
     maxScreenshots: 'Up to 5 screenshots per entry.', noScreenshots: 'No screenshots.',
     viewByDay: 'By day', viewByProject: 'By project', daysCount: 'days', totalLabel: 'Total',
@@ -1292,8 +1293,6 @@ function AdminView({
   }, [users, workLogs, last7Days]);
 
   const visibleEmployeeUsers = users.filter((u: Profile) => !(u.email && isProtectedDomain(u.email)) && (!isDeveloperEmail(u.email) || Boolean(u.dev_access)));
-  const adminEmployeeUsers = visibleEmployeeUsers.filter((u: Profile) => u.role === 'admin' || u.dev_access);
-  const regularEmployeeUsers = visibleEmployeeUsers.filter((u: Profile) => u.role === 'user' && !u.dev_access);
 
   return (
     <div className="admin-view">
@@ -1382,71 +1381,10 @@ function AdminView({
         <RecordsTable t={t} lang={lang} records={records} sortBy={sortBy} />
       </div>
 
-      {/* Project List */}
-      <div className="admin-section">
-        <div className="section-header">
-          <h2>{t.projectList}</h2>
-          <button className="btn-primary" onClick={onCreate}><Plus size={15} />{t.createProject}</button>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t.projectCode}</th>
-                <th>{t.projectName}</th>
-                <th>{t.company}</th>
-                <th>{t.description}</th>
-                <th>Status</th>
-                <th>{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((p: Project) => (
-                <tr key={p.id}>
-                  <td><span className="code-badge">{p.project_code}</span></td>
-                  <td>{p.name}</td>
-                  <td>{p.company || '—'}</td>
-                  <td className="td-desc">{p.description}</td>
-                  <td>
-                    <span className={`status-badge ${p.is_active ? 'active' : 'inactive'}`}>
-                      {p.is_active ? t.active : t.inactive}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="action-btns">
-                      <button className="btn-action" onClick={() => onEdit(p)} title={t.edit}><Pencil size={13} /></button>
-                      <button
-                        className={`btn-action ${p.is_active ? 'deactivate' : 'activate'}`}
-                        onClick={() => onToggleActive(p)}
-                        title={p.is_active ? t.deactivate : t.activate}
-                      >
-                        {p.is_active ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
-                      </button>
-                      <button className="btn-action danger" onClick={() => onDelete(p)} title={t.delete}><Trash2 size={13} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <ProjectList t={t} projects={projects} onCreate={onCreate} onEdit={onEdit} onToggleActive={onToggleActive} onDelete={onDelete} />
 
-      {/* User List — all users with role editing */}
-      <div className="admin-section">
-        <div className="section-header">
-          <h2>{t.userList}</h2>
-          <button className="btn-primary" onClick={onAddUser}><UserPlus size={15} />{t.addUser}</button>
-        </div>
-        <div className="employee-role-group">
-          <h3>Admin <span>{adminEmployeeUsers.length}</span></h3>
-          <EmployeeTable t={t} users={adminEmployeeUsers} currentProfile={currentProfile} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUpdateRole={onUpdateRole} />
-        </div>
-        <div className="employee-role-group">
-          <h3>User <span>{regularEmployeeUsers.length}</span></h3>
-          <EmployeeTable t={t} users={regularEmployeeUsers} currentProfile={currentProfile} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUpdateRole={onUpdateRole} />
-        </div>
-      </div>
+      <EmployeeList t={t} users={visibleEmployeeUsers} currentId={currentProfile?.id} isLocked={(u: Profile) => Boolean(u.dev_access) && !isDeveloperEmail(u.email)}
+        onAddUser={onAddUser} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUpdateRole={onUpdateRole} />
 
       {/* Admin tools */}
       <div className="admin-section">
@@ -1470,37 +1408,6 @@ function AdminView({
           </p>
         )}
       </div>
-    </div>
-  );
-}
-
-function EmployeeTable({ t, users, currentProfile, onEditUser, onDeleteUser, onUpdateRole }: any) {
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead><tr><th>{t.name}</th><th>Email</th><th>{t.role}</th><th>{t.actions}</th></tr></thead>
-        <tbody>
-          {users.map((user: Profile) => {
-            const isSelf = user.id === currentProfile?.id;
-            const isITOps = Boolean(user.dev_access) && !isDeveloperEmail(user.email);
-            return (
-              <tr key={user.id}>
-                <td>{user.full_name}</td>
-                <td style={{ color: 'var(--muted)', fontSize: 12 }}>{user.email || '—'}</td>
-                <td>
-                  {isITOps ? <span className="role-badge admin">Admin (IT-Ops)</span> : isSelf ? <span className={`role-badge ${user.role}`}>{user.role}</span> : (
-                    <select className="role-select" value={user.role} onChange={event => onUpdateRole(user, event.target.value)}>
-                      <option value="user">user</option><option value="admin">admin</option>
-                    </select>
-                  )}
-                </td>
-                <td><div className="action-btns"><button className="btn-action" onClick={() => onEditUser(user)}><Pencil size={13} /> {t.edit}</button>{!isSelf && <button className="btn-action danger" onClick={() => onDeleteUser(user)}><Trash2 size={13} /> {t.delete}</button>}</div></td>
-              </tr>
-            );
-          })}
-          {!users.length && <tr><td colSpan={4} className="td-empty">{t.noData}</td></tr>}
-        </tbody>
-      </table>
     </div>
   );
 }

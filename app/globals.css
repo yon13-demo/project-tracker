@@ -887,3 +887,30 @@ tbody tr:hover { background: #fafbff; }
   .records-table td.col-name { font-weight: 600; }
   .rec-hours { justify-content: flex-start; margin-top: 4px; }
 }
+
+/* Admin lists (Daftar Proyek, Daftar Karyawan): search + segmented filter, two-line rows, icon actions */
+.list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.list-filters .search-input { flex: 1 1 240px; min-width: 0; }
+.list-table { width: 100%; table-layout: fixed; }
+.list-table td { vertical-align: middle; }
+.list-table .col-code { width: 132px; white-space: nowrap; }
+.list-table .col-role { width: 170px; }
+.list-table .col-actions { width: 132px; text-align: right; }
+.list-main { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.list-sub { margin-top: 2px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.list-you { font-weight: 500; font-size: 12px; color: var(--muted); }
+.list-actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
+.btn-action.icon { width: 32px; height: 32px; padding: 0; justify-content: center; }
+.list-table tr.is-inactive .list-main, .list-table tr.is-inactive .code-badge { opacity: .55; }
+.list-table .status-badge { font-size: 10px; }
+
+@media (max-width: 640px) {
+  .list-table, .list-table tbody, .list-table tr { display: block; width: 100%; }
+  .list-table thead { display: none; }
+  .list-table tr { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .list-table td { display: block; padding: 0; border: 0; width: auto !important; text-align: left; }
+  .list-table td.col-code { grid-column: 1; }
+  .list-table td.col-actions { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+  .list-table td.col-role { grid-column: 1; }
+  .list-table td.td-empty { grid-column: 1 / -1; text-align: center; }
+}
