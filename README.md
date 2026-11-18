@@ -25,9 +25,12 @@ Aplikasi ringan Next.js untuk Vercel dengan dua peran: **admin** dan **user**, s
 
 ### Absensi (opsional)
 
-Form pencatatan kerja menampilkan jam absen (clock-in → clock-out) dan cuti dari database absensi vendor untuk tanggal yang dipilih, lalu membandingkannya dengan jam yang sudah dicatat. Data absensi hanya dibaca, tidak pernah diubah. Karyawan dicocokkan lewat email login Weave dengan `employees.email`, `employees.work_email`, atau `employee_emails` di absensi.
+Form pencatatan kerja menampilkan jam absen (clock-in → clock-out) dan cuti dari database absensi vendor untuk tanggal yang dipilih, lalu membandingkannya dengan jam yang sudah dicatat. Data absensi hanya dibaca lewat satu fungsi database yang sempit: satu karyawan (dicocokkan lewat email login Weave), satu tanggal. Weave **tidak** memakai service role key absensi.
 
-Tambahkan `ATTENDANCE_SUPABASE_URL` dan `ATTENDANCE_SUPABASE_KEY` (server-only, tanpa awalan `NEXT_PUBLIC_`) di `.env.local` dan Vercel. Tanpa keduanya, form tetap berjalan dan hanya menampilkan "Absensi tidak tersedia".
+1. Di SQL Editor Supabase **absensi**, jalankan `supabase/attendance/weave-attendance-access.sql`, lalu `select weave_private.rotate_code();` untuk mendapatkan kode akses.
+2. Di `.env.local` dan Vercel (Production dan Preview), isi `ATTENDANCE_SUPABASE_URL`, `ATTENDANCE_SUPABASE_ANON_KEY` (anon/publishable key project absensi), dan `ATTENDANCE_ACCESS_CODE`. Semuanya server-only, tanpa awalan `NEXT_PUBLIC_`.
+
+Tanpa variabel ini form tetap berjalan dan hanya menampilkan "Absensi tidak tersedia". Jika kode bocor, jalankan `rotate_code()` lagi; kode lama langsung tidak berlaku.
 
 Di panel Admin, `Pengaturan Admin` menyediakan pilihan metode login `Password`, `Microsoft`, atau `Keduanya`. Nama akun Microsoft diambil dari metadata `name`/`full_name` dan email berasal dari akun OAuth.
 
