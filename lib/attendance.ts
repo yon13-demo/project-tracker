@@ -1,5 +1,5 @@
 // Attendance (vendor clocking system): pure helpers shared by the API route and the work log UI.
-// The vendor database is read-only for Weave; see lib/attendanceServer.ts.
+// Weave reads it through one narrow database function; see lib/attendanceServer.ts.
 
 export type LeaveType = 'cuti' | 'sakit' | 'izin' | 'menikah' | string;
 
@@ -35,6 +35,16 @@ export function summarizeDay(date: string, hours: HoursRow[], leaves: LeaveRow[]
     tz: hours.find(r => r.tz)?.tz || 'Asia/Jakarta',
     leave: pickLeave(leaves),
   };
+}
+
+export const notMatched = (date: string): AttendanceDay =>
+  ({ matched: false, date, hours: null, overtimeHours: 0, firstIn: null, lastOut: null, tz: 'Asia/Jakarta', leave: null });
+
+// The attendance function's reply: { matched, hours: HoursRow[], leaves: LeaveRow[] }.
+export function fromAttendanceReply(date: string, reply: unknown): AttendanceDay {
+  const r = (reply ?? {}) as { matched?: boolean; hours?: HoursRow[]; leaves?: LeaveRow[] };
+  if (!r.matched) return notMatched(date);
+  return summarizeDay(date, Array.isArray(r.hours) ? r.hours : [], Array.isArray(r.leaves) ? r.leaves : []);
 }
 
 // Approved leave that was actually taken (not a cuti bersama worked through, not a weekend inside a range).
