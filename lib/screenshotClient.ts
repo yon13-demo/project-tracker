@@ -31,6 +31,13 @@ export function fetchShots(dates: string[], userId?: string) {
   return call<ShotsByDate>(`/api/screenshots?${q}`);
 }
 
+export type ShotCounts = Record<string, Record<string, number>>;
+
+// How many screenshots each entry has, for (userId, date) pairs: { "userId/date": { entryKey: count } }.
+export function fetchShotCounts(pairs: { userId: string; date: string }[]) {
+  return call<ShotCounts>(`/api/screenshots?${new URLSearchParams({ counts: pairs.map(p => `${p.userId}:${p.date}`).join(',') })}`);
+}
+
 export function fetchEntryShots(userId: string, date: string, key: string) {
   return call<Shot[]>(`/api/screenshots?${new URLSearchParams({ userId, date, key })}`);
 }

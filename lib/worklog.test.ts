@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, mergeSameProject, newEntryDraft, saveDay, workLogToExistingEntry, type EntryInput } from './worklog';
+import { buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, mergeSameProject, newEntryDraft, normalizeLogs, saveDay, saveLeaveDay, workLogToExistingEntry, type EntryInput } from './worklog';
 
 const entry = (patch: Partial<EntryInput>): EntryInput => ({
   category: 'project', project_id: null, custom_name: '', custom_code: '', description: '', hours: 1, ...patch,
@@ -73,36 +73,70 @@ describe('workLogToExistingEntry', () => {
 
 function fakeClient(opts: { existing?: { id: string }[]; insertError?: string } = {}) {
   const calls: string[] = [];
-  let inserts = 0;
+  const inserted: unknown[][] = [];
   const client = {
     from: () => ({
-      select: () => ({ eq: () => ({ eq: async () => { calls.push('select'); return { data: opts.existing ?? [], error: null }; } }) }),
-      delete: () => ({ eq: () => ({ eq: async () => { calls.push('delete'); return { error: null }; } }) }),
-      insert: async (rows: unknown[]) => {
-        inserts += 1;
-        calls.push(inserts === 1 ? `insert:${rows.length}` : `restore:${rows.length}`);
-        return { error: inserts === 1 && opts.insertError ? { message: opts.insertError } : null };
+      delete: () => ({ eq: () => ({ eq: () => ({ select: async () => { calls.push('delete'); return { data: opts.existing ?? [], error: null }; } }) }) }),
+      insert: (rows: unknown[]) => {
+        inserted.push(rows);
+        const first = inserted.length === 1;
+        calls.push(first ? `insert:${rows.length}` : `restore:${rows.length}`);
+        const failed = first && Boolean(opts.insertError);
+        const result = { data: failed ? null : rows.map((r, i) => ({ id: `n${i}`, ...(r as object) })), error: failed ? { message: opts.insertError } : null };
+        return Object.assign(Promise.resolve(result), { select: async () => result });
       },
     }),
   };
-  return { client: client as unknown as SupabaseClient, calls };
+  return { client: client as unknown as SupabaseClient, calls, inserted };
 }
 
 describe('saveDay (I8: never lose the day on a failed insert)', () => {
-  it('snapshots, deletes and inserts', async () => {
+  it('deletes (keeping the old rows) and inserts in two calls, returning the saved rows', async () => {
     const { client, calls } = fakeClient({ existing: [{ id: 'a' }, { id: 'b' }] });
-    expect(await saveDay(client, 'u', 'd', [entry({ project_id: 'p1' })], true)).toEqual({ error: null });
-    expect(calls).toEqual(['select', 'delete', 'insert:1']);
+    const res = await saveDay(client, 'u', 'd', [entry({ project_id: 'p1' })], true);
+    expect(res.error).toBeNull();
+    expect(res.rows).toHaveLength(1);
+    expect(calls).toEqual(['delete', 'insert:1']);
   });
   it('puts the old rows back when the insert fails', async () => {
     const { client, calls } = fakeClient({ existing: [{ id: 'a' }], insertError: 'RLS' });
-    expect(await saveDay(client, 'u', 'd', [entry({ project_id: 'p1' })], true)).toEqual({ error: 'RLS' });
-    expect(calls).toEqual(['select', 'delete', 'insert:1', 'restore:1']);
+    expect(await saveDay(client, 'u', 'd', [entry({ project_id: 'p1' })], true)).toEqual({ error: 'RLS', rows: [] });
+    expect(calls).toEqual(['delete', 'insert:1', 'restore:1']);
   });
   it('an empty list just clears the day', async () => {
     const { client, calls } = fakeClient({ existing: [{ id: 'a' }] });
-    await saveDay(client, 'u', 'd', [], true);
-    expect(calls).toEqual(['select', 'delete']);
+    expect(await saveDay(client, 'u', 'd', [], true)).toEqual({ error: null, rows: [] });
+    expect(calls).toEqual(['delete']);
+  });
+});
+
+describe('saveLeaveDay', () => {
+  it('replaces the day with one leave row, with the note as description', async () => {
+    const { client, calls, inserted } = fakeClient({ existing: [{ id: 'a' }] });
+    expect((await saveLeaveDay(client, 'u', 'd', true, 'Sakit')).error).toBeNull();
+    expect(calls).toEqual(['delete', 'insert:1']);
+    expect(inserted[0]).toEqual([{ user_id: 'u', log_date: 'd', is_leave: true, description: 'Sakit' }]);
+  });
+  it('leaves out the description before the v4 schema', async () => {
+    const { client, inserted } = fakeClient();
+    await saveLeaveDay(client, 'u', 'd', false, 'Sakit');
+    expect(inserted[0]).toEqual([{ user_id: 'u', log_date: 'd', is_leave: true }]);
+  });
+  it('restores the old rows when the insert fails', async () => {
+    const { client, calls } = fakeClient({ existing: [{ id: 'a' }], insertError: 'RLS' });
+    expect((await saveLeaveDay(client, 'u', 'd', true, '')).error).toBe('RLS');
+    expect(calls).toEqual(['delete', 'insert:1', 'restore:1']);
+  });
+});
+
+describe('normalizeLogs', () => {
+  it('unwraps joined rows returned as arrays', () => {
+    const [row] = normalizeLogs([{ id: '1', profiles: [{ full_name: 'A' }], projects: [{ name: 'P', project_code: 'C' }] }]);
+    expect(row.profiles).toEqual({ full_name: 'A' });
+    expect(row.projects).toEqual({ name: 'P', project_code: 'C' });
+  });
+  it('treats missing data as empty', () => {
+    expect(normalizeLogs(null)).toEqual([]);
   });
 });
 

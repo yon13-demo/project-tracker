@@ -1,20 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyViewer } from '@/lib/apiAuth';
-import { canAccessShot, DATE_RE, KEY_RE } from '@/lib/screenshots';
-import { ensureBucket, listEntryShots, listShots, removeDayShots, removeShot, uploadShot } from '@/lib/screenshotsServer';
+import { canAccessShot, DATE_RE, KEY_RE, UUID_RE } from '@/lib/screenshots';
+import { countShots, ensureBucket, listEntryShots, listShots, removeDayShots, removeShot, uploadShot } from '@/lib/screenshotsServer';
 
 export const runtime = 'nodejs';
 const MAX_DATES = 62;
+const MAX_PAIRS = 60;
 
 const unauthorized = () => NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 const bad = (error: string) => NextResponse.json({ error }, { status: 400 });
 
 // GET ?dates=d1,d2[&userId=]      → { [date]: { [entryKey]: Shot[] } }
 // GET ?date=d&key=k[&userId=]     → Shot[]
+// GET ?counts=userId:date,...      → { "userId/date": { [entryKey]: count } }  (recap indicator)
 export async function GET(request: NextRequest) {
   const viewer = await verifyViewer(request);
   if (!viewer) return unauthorized();
   const params = request.nextUrl.searchParams;
+
+  const counts = params.get('counts');
+  if (counts !== null) {
+    const pairs = [...new Set(counts.split(',').filter(Boolean))].map(p => { const [userId, date] = p.split(':'); return { userId, date }; });
+    if (pairs.length > MAX_PAIRS || !pairs.every(p => UUID_RE.test(p.userId || '') && DATE_RE.test(p.date || ''))) return bad('counts');
+    if (!viewer.isAdmin && pairs.some(p => p.userId !== viewer.id)) return unauthorized();
+    return NextResponse.json(await countShots(viewer.db, pairs));
+  }
   const userId = params.get('userId') || viewer.id;
   if (userId !== viewer.id && !viewer.isAdmin) return unauthorized();
 

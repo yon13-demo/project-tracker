@@ -13,6 +13,7 @@ import { showAlert, showStatus, registerNotifiers } from '@/lib/notify';
 import {
   CATEGORY_LABEL, draftToEntry, groupLogsByProject, isDraftReady, isManualProject, logProjectCode, logProjectName, newEntryDraft, saveDay,
   type EntryDraft, type Project, type WorkCategory, type WorkLog,
+  LOG_COLUMNS, LOG_COLUMNS_V4, normalizeLogs, saveLeaveDay,
 } from '@/lib/worklog';
 import { EntryFields } from '@/components/EntryFields';
 import { DayTimerPanel } from '@/components/DayTimerPanel';
@@ -20,7 +21,7 @@ import { ClampedText } from '@/components/ClampedText';
 import { ScreenshotStrip } from '@/components/ScreenshotStrip';
 import { AttendanceBar } from '@/components/AttendanceBar';
 import { leaveLabel } from '@/lib/attendance';
-import { AdminShotsButton } from '@/components/AdminShotsButton';
+import { RecordsTable } from '@/components/RecordsTable';
 import { useScreenshots } from '@/components/useScreenshots';
 import { entryKey } from '@/lib/screenshots';
 
@@ -103,7 +104,7 @@ const text = {
     backToTimer: 'Kembali ke timer', send: 'Kirim', daySent: 'Hari terkirim.', reviewTotal: 'Total jam',
     reviewZeroHint: 'Baris 0 jam tidak disimpan.',
     inDevelopment: 'Dalam pengembangan', expand: 'Buka', collapse: 'Ciutkan',
-    showMore: 'Lihat selengkapnya', showLess: 'Tutup', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshot',
+    showMore: 'Lihat selengkapnya', showLess: 'Tutup', noDescription: 'Tanpa deskripsi', entriesCount: 'entri', showMoreRows: 'Tampilkan lagi', ofTotal: 'dari', projectCol: 'Proyek', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshot',
     pasteHint: 'Klik, tempel (Ctrl+V) atau seret gambar ke sini', pickProjectFirst: 'Pilih proyek dulu untuk menambah screenshot.',
     maxScreenshots: 'Maksimal 5 screenshot per entri.', noScreenshots: 'Tidak ada screenshot.',
     viewByDay: 'Per hari', viewByProject: 'Per proyek', daysCount: 'hari', totalLabel: 'Total',
@@ -173,7 +174,7 @@ const text = {
     backToTimer: 'Back to timer', send: 'Send', daySent: 'Day sent.', reviewTotal: 'Total hours',
     reviewZeroHint: 'Rows with 0 hours are not saved.',
     inDevelopment: 'In development', expand: 'Expand', collapse: 'Collapse',
-    showMore: 'Show more', showLess: 'Show less', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshots',
+    showMore: 'Show more', showLess: 'Show less', noDescription: 'No description', entriesCount: 'entries', showMoreRows: 'Show more', ofTotal: 'of', projectCol: 'Project', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshots',
     pasteHint: 'Click, paste (Ctrl+V) or drop an image here', pickProjectFirst: 'Choose the project first to add screenshots.',
     maxScreenshots: 'Up to 5 screenshots per entry.', noScreenshots: 'No screenshots.',
     viewByDay: 'By day', viewByProject: 'By project', daysCount: 'days', totalLabel: 'Total',
@@ -351,13 +352,12 @@ export default function Home() {
     const devAccess = Boolean((own as any).dev_access) || isDeveloperEmail(identityEmail);
     setProfile({ ...(own as Profile), full_name: profileName, role: effectiveRole, email: identityEmail, dev_access: devAccess });
 
-    const logColumns = 'id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)';
     const loadLogs = async () => {
       // These columns exist only after supabase/schema-v4-worklog-entries.sql has been run.
-      const withManual = await supabase.from('work_logs').select(`${logColumns},custom_project_name,custom_project_code,category,description`).order('log_date', { ascending: false });
+      const withManual = await supabase.from('work_logs').select(LOG_COLUMNS_V4).order('log_date', { ascending: false });
       setHasV4Schema(!withManual.error);
       if (!withManual.error) return withManual;
-      return supabase.from('work_logs').select(logColumns).order('log_date', { ascending: false });
+      return supabase.from('work_logs').select(LOG_COLUMNS).order('log_date', { ascending: false });
     };
     const [{ data: allProjects }, { data: logs }, { data: allUsers }] = await Promise.all([
       supabase.from('projects').select('id,project_code,name,company,description,is_active,inactive_from').order('created_at', { ascending: false }),
@@ -385,18 +385,18 @@ export default function Home() {
       } catch {}
     }
 
-    const normalized = (logs || []).map((r: any) => ({
-      ...r,
-      profiles: Array.isArray(r.profiles) ? r.profiles[0] : r.profiles,
-      projects: Array.isArray(r.projects) ? r.projects[0] : r.projects,
-    }));
-
     setProjects((allProjects || []) as Project[]);
-    setWorkLogs(normalized as WorkLog[]);
+    setWorkLogs(normalizeLogs(logs));
     setLogsLoaded(true);
     setUsers(enrichedUsers);
     setLoading(false);
   }, [configured]);
+
+  // After a save: swap in the saved rows of that user's day instead of reloading everything.
+  const applyDay = useCallback((userId: string, date: string, rows: WorkLog[]) => {
+    setWorkLogs(prev => [...rows, ...prev.filter(w => !(w.user_id === userId && w.log_date === date))]
+      .sort((a, b) => b.log_date.localeCompare(a.log_date)));
+  }, []);
 
   useEffect(() => {
     loadSettings();
@@ -683,7 +683,8 @@ export default function Home() {
           currentProfile={profile}
         />
       ) : (
-        <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} logsLoaded={logsLoaded} hasV4Schema={hasV4Schema} onRefresh={load} />
+        <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} logsLoaded={logsLoaded} hasV4Schema={hasV4Schema}
+          onDayChanged={(date, rows) => applyDay(profile.id, date, rows)} />
       )}
 
       {changePassOpen && <ChangePasswordModal t={t} lang={lang} onClose={() => setChangePassOpen(false)} />}
@@ -934,8 +935,8 @@ function formatCardDate(dateStr: string, lang: Lang): string {
   return formatted;
 }
 
-function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schema, onRefresh }: {
-  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; logsLoaded: boolean; hasV4Schema: boolean; onRefresh: () => void;
+function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schema, onDayChanged }: {
+  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; logsLoaded: boolean; hasV4Schema: boolean; onDayChanged: (date: string, rows: WorkLog[]) => void;
 }) {
   const days = getLast45Days();
   const logsByDate = useMemo(() => {
@@ -993,7 +994,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
     const { error } = await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', date);
     setSaving(false);
     if (error) showAlert(error.message);
-    else { void shotsApi.removeDay(date); onRefresh(); }
+    else { void shotsApi.removeDay(date); onDayChanged(date, []); }
   }
 
   function loadDate(date: string) {
@@ -1039,13 +1040,10 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
 
   async function handleMarkLeave() {
     setSaving(true);
-    await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', selectedDate);
-    const { error } = await supabase.from('work_logs').insert({
-      user_id: profile.id, log_date: selectedDate, is_leave: true, ...(hasV4Schema && leaveNote ? { description: leaveNote } : {}),
-    });
+    const saved = await saveLeaveDay(supabase, profile.id, selectedDate, hasV4Schema, leaveNote);
     setSaving(false);
-    if (error) showAlert(error.message);
-    else { setFormOpen(false); onRefresh(); }
+    if (saved.error) showAlert(saved.error);
+    else { setFormOpen(false); onDayChanged(selectedDate, saved.rows); }
   }
 
   async function handleSubmit() {
@@ -1056,10 +1054,10 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
       if (!isDraftReady(e)) { showAlert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return; }
     }
     setSaving(true);
-    const { error } = await saveDay(supabase, profile.id, selectedDate, dateEntries.map(draftToEntry), hasV4Schema);
+    const saved = await saveDay(supabase, profile.id, selectedDate, dateEntries.map(draftToEntry), hasV4Schema);
     setSaving(false);
-    if (error) showAlert(error);
-    else { setFormOpen(false); onRefresh(); }
+    if (saved.error) showAlert(saved.error);
+    else { setFormOpen(false); onDayChanged(selectedDate, saved.rows); }
   }
 
   return (
@@ -1071,7 +1069,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
       <div className="worklog-layout">
       <div className="worklog-column">
         <DayTimerPanel t={t} lang={lang} userId={profile.id} projects={projects} hasV4Schema={hasV4Schema}
-          workLogs={workLogs} logsLoaded={logsLoaded} onSent={onRefresh} />
+          workLogs={workLogs} logsLoaded={logsLoaded} onSent={onDayChanged} />
         {!formOpen ? (
           <button className="worklog-cta" onClick={() => openForm(todayStr())}>
             <span className="worklog-cta-title">{t.logWork}</span>
@@ -1318,27 +1316,14 @@ function AdminView({
       {/* Records */}
       <div className="admin-section records-section">
         <div className="section-header">
-          <h2>{t.records}</h2>
+          <h2>{t.records} <span className="records-count">{records.length} {t.entriesCount} · {Math.round(records.reduce((s: number, r: WorkLog) => s + (r.hours || 0), 0) * 10) / 10} {t.hoursUnit}</span></h2>
           <div className="section-actions">
             <button className="btn-secondary" onClick={() => setShowCheckHours(!showCheckHours)}>
               <AlertCircle size={15} />{t.checkHours}
             </button>
-            <div className="export-controls">
-              <select className="sort-select" value={exportPeriod} onChange={e => setExportPeriod(e.target.value)} aria-label={t.records}>
-                <option value="all">{t.all}</option>
-                {exportMonths.map(period => (
-                  <option key={period} value={period}>
-                    {new Date(`${period}-01T00:00:00`).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' })}
-                  </option>
-                ))}
-              </select>
-              <input className="date-filter" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} aria-label={t.fromDate} title={t.fromDate} />
-              <span className="date-filter-separator">–</span>
-              <input className="date-filter" type="date" value={toDate} onChange={e => setToDate(e.target.value)} aria-label={t.toDate} title={t.toDate} />
-              <button className="btn-secondary" onClick={() => onExport(exportPeriod, fromDate, toDate)}>
-                <Download size={15} />{t.export}
-              </button>
-            </div>
+            <button className="btn-secondary" onClick={() => onExport(exportPeriod, fromDate, toDate)}>
+              <Download size={15} />{t.export}
+            </button>
           </div>
         </div>
 
@@ -1373,43 +1358,28 @@ function AdminView({
           </div>
         )}
 
-        <div className="toolbar">
+        <div className="records-filters">
           <input className="search-input" value={query} onChange={e => setQuery(e.target.value)} placeholder={t.search} />
+          <select className="sort-select" value={exportPeriod} onChange={e => setExportPeriod(e.target.value)} aria-label={t.records}>
+            <option value="all">{t.all}</option>
+            {exportMonths.map(period => (
+              <option key={period} value={period}>
+                {new Date(`${period}-01T00:00:00`).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' })}
+              </option>
+            ))}
+          </select>
+          <span className="records-range">
+            <input className="date-filter" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} aria-label={t.fromDate} title={t.fromDate} />
+            <span className="date-filter-separator">–</span>
+            <input className="date-filter" type="date" value={toDate} onChange={e => setToDate(e.target.value)} aria-label={t.toDate} title={t.toDate} />
+          </span>
           <select className="sort-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
             <option value="date">{t.sortBy}: {t.byDate}</option>
             <option value="name">{t.sortBy}: {t.byName}</option>
           </select>
         </div>
 
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t.user}</th>
-                <th>{t.kategori}</th>
-                <th>{t.namaProyek}</th>
-                <th>{t.nomorProyek}</th>
-                <th>{t.deskripsiHeader}</th>
-                <th>{t.tanggal}</th>
-                <th>{t.jamKerjaHeader}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r: WorkLog) => (
-                <tr key={r.id}>
-                  <td>{r.profiles?.full_name}</td>
-                  <td>{CATEGORY_LABEL[r.category || 'project']}</td>
-                  <td>{logProjectName(r) || <span className="code-placeholder">—</span>}{isManualProject(r) && <span className="hours-badge warn manual-tag">{t.manual}</span>}</td>
-                  <td>{logProjectCode(r) ? <span className="code-badge">{logProjectCode(r)}</span> : <span className="code-placeholder">—</span>}</td>
-                  <td className="td-desc">{r.description || <span className="code-placeholder">—</span>}</td>
-                  <td>{r.log_date}</td>
-                  <td><span className="admin-hours-cell"><span className="hours-badge">{r.hours} jam</span><AdminShotsButton t={t} log={r} /></span></td>
-                </tr>
-              ))}
-              {!records.length && <tr><td colSpan={7} className="td-empty">{t.noData}</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <RecordsTable t={t} lang={lang} records={records} sortBy={sortBy} />
       </div>
 
       {/* Project List */}

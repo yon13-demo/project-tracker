@@ -70,19 +70,43 @@ export function mergeSameProject(entries: EntryInput[]): EntryInput[] {
   return merged;
 }
 
-// Replaces every work-log row of the user on that date with `entries` (same as the form always did).
-// The old rows are snapshotted first and put back if the insert fails, so a failed save never empties the day.
-export async function saveDay(client: SupabaseClient, userId: string, date: string, entries: EntryInput[], hasV4Schema: boolean): Promise<{ error: string | null }> {
-  const old = await client.from('work_logs').select('*').eq('user_id', userId).eq('log_date', date);
-  if (old.error) return { error: old.error.message };
-  const removed = await client.from('work_logs').delete().eq('user_id', userId).eq('log_date', date);
-  if (removed.error) return { error: removed.error.message };
-  if (!entries.length) return { error: null };
-  const { error } = await client.from('work_logs').insert(buildWorkLogInserts(userId, date, mergeSameProject(entries), hasV4Schema));
-  if (!error) return { error: null };
-  const previous = (old.data ?? []).map(({ profiles: _p, projects: _j, ...row }: Record<string, unknown>) => row);
+// Columns the app reads for a work log, with the joined user name and project.
+export const LOG_COLUMNS = 'id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)';
+export const LOG_COLUMNS_V4 = `${LOG_COLUMNS},custom_project_name,custom_project_code,category,description`;
+
+// PostgREST can return a joined row as a one-item array; the UI expects an object.
+export function normalizeLogs(rows: unknown[] | null | undefined): WorkLog[] {
+  return (rows ?? []).map((r: any) => ({
+    ...r,
+    profiles: Array.isArray(r.profiles) ? r.profiles[0] : r.profiles,
+    projects: Array.isArray(r.projects) ? r.projects[0] : r.projects,
+  })) as WorkLog[];
+}
+
+export type SaveResult = { error: string | null; rows: WorkLog[] };
+
+// Replaces every work-log row of the user on that date with `rows`, in two calls:
+// the delete returns the old rows, and if the insert then fails they are put back, so a failed save never empties the day.
+// On success the saved rows come back with their joins, so the caller can update its list without reloading everything.
+async function replaceDay(client: SupabaseClient, userId: string, date: string, rows: Record<string, unknown>[], hasV4Schema: boolean): Promise<SaveResult> {
+  const removed = await client.from('work_logs').delete().eq('user_id', userId).eq('log_date', date).select('*');
+  if (removed.error) return { error: removed.error.message, rows: [] };
+  if (!rows.length) return { error: null, rows: [] };
+  const inserted = await client.from('work_logs').insert(rows).select(hasV4Schema ? LOG_COLUMNS_V4 : LOG_COLUMNS);
+  if (!inserted.error) return { error: null, rows: normalizeLogs(inserted.data) };
+  const previous = (removed.data ?? []).map(({ profiles: _p, projects: _j, ...row }: Record<string, unknown>) => row);
   if (previous.length) await client.from('work_logs').insert(previous);
-  return { error: error.message };
+  return { error: inserted.error.message, rows: [] };
+}
+
+export function saveDay(client: SupabaseClient, userId: string, date: string, entries: EntryInput[], hasV4Schema: boolean): Promise<SaveResult> {
+  return replaceDay(client, userId, date, buildWorkLogInserts(userId, date, mergeSameProject(entries), hasV4Schema), hasV4Schema);
+}
+
+// A leave day is one row without hours; `note` (e.g. "Sakit" from attendance) is kept as its description.
+export function saveLeaveDay(client: SupabaseClient, userId: string, date: string, hasV4Schema: boolean, note: string): Promise<SaveResult> {
+  const row = { user_id: userId, log_date: date, is_leave: true, ...(hasV4Schema && note ? { description: note } : {}) };
+  return replaceDay(client, userId, date, [row], hasV4Schema);
 }
 
 export function isLeaveDate(logs: WorkLog[], date: string): boolean {

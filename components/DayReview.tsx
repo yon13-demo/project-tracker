@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { buildReviewRows, formatClock, refreshExistingRows, reviewRowsToEntries, type ReviewRow } from '@/lib/dayTimer';
-import { saveDay, type ExistingEntry } from '@/lib/worklog';
+import { saveDay, type ExistingEntry, type WorkLog } from '@/lib/worklog';
 import { supabase } from '@/lib/supabase';
 import { showAlert, showStatus } from '@/lib/notify';
 import type { DayTimer } from './useDayTimer';
 
 export function DayReview({ t, timer, existing, logsLoaded, isLeave, hasV4Schema, onSent }: {
-  t: any; timer: DayTimer; existing: ExistingEntry[]; logsLoaded: boolean; isLeave: boolean; hasV4Schema: boolean; onSent: () => void;
+  t: any; timer: DayTimer; existing: ExistingEntry[]; logsLoaded: boolean; isLeave: boolean; hasV4Schema: boolean; onSent: (date: string, rows: WorkLog[]) => void;
 }) {
   const state = timer.state!;
   const [rows, setRows] = useState<ReviewRow[]>(() => buildReviewRows(state, Date.now(), existing));
@@ -25,12 +25,13 @@ export function DayReview({ t, timer, existing, logsLoaded, isLeave, hasV4Schema
 
   async function send() {
     setSending(true);
-    const { error } = await saveDay(supabase, state.userId, state.date, reviewRowsToEntries(rows), hasV4Schema);
+    const date = state.date;
+    const saved = await saveDay(supabase, state.userId, date, reviewRowsToEntries(rows), hasV4Schema);
     setSending(false);
-    if (error) { showAlert(error); return; }
+    if (saved.error) { showAlert(saved.error); return; }
     timer.finishDay();
     showStatus(t.daySent);
-    onSent();
+    onSent(date, saved.rows);
   }
 
   return (

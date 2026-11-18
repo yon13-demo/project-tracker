@@ -11,7 +11,7 @@ import { DayReview } from './DayReview';
 import { isLeaveDate, workLogToExistingEntry, type Project, type WorkLog } from '@/lib/worklog';
 
 export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs, logsLoaded, onSent }: {
-  t: any; lang: 'id' | 'en'; userId: string; projects: Project[]; hasV4Schema: boolean; workLogs: WorkLog[]; logsLoaded: boolean; onSent: () => void;
+  t: any; lang: 'id' | 'en'; userId: string; projects: Project[]; hasV4Schema: boolean; workLogs: WorkLog[]; logsLoaded: boolean; onSent: (date: string, rows: WorkLog[]) => void;
 }) {
   const timer = useDayTimer(userId);
   const pip = usePipWindow();
