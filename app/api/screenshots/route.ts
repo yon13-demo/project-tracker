@@ -1,28 +1,10 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyViewer } from '@/lib/apiAuth';
 import { canAccessShot, DATE_RE, KEY_RE } from '@/lib/screenshots';
 import { ensureBucket, listEntryShots, listShots, removeDayShots, removeShot, uploadShot } from '@/lib/screenshotsServer';
 
 export const runtime = 'nodejs';
-const DEVELOPER_DOMAINS = ['leonxlab.app', 'leonxlab.digital'];
 const MAX_DATES = 62;
-
-function adminClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
-
-// Who is calling: their user id and whether they may see everyone's screenshots.
-async function verifyViewer(request: NextRequest) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  const db = adminClient();
-  const { data: { user } } = await db.auth.getUser(token);
-  if (!user) return null;
-  const { data: profile } = await db.from('profiles').select('role,dev_access').eq('id', user.id).single();
-  const email = user.email?.toLowerCase() || '';
-  const isAdmin = profile?.role === 'admin' || Boolean(profile?.dev_access) || DEVELOPER_DOMAINS.some(d => email.endsWith(`@${d}`));
-  return { db, id: user.id, isAdmin };
-}
 
 const unauthorized = () => NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 const bad = (error: string) => NextResponse.json({ error }, { status: 400 });

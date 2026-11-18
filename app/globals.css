@@ -829,3 +829,17 @@ tbody tr:hover { background: #fafbff; }
   font-size: 12px;
   color: var(--brand);
 }
+
+/* Attendance reference under the work log date */
+.attendance-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 12px; margin-bottom: 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); font-size: 13px; color: var(--ink); }
+.attendance-bar svg { flex-shrink: 0; color: var(--muted); }
+.attendance-bar.muted { color: var(--muted); }
+.attendance-bar .attendance-gap { flex-basis: 100%; padding-left: 22px; color: var(--muted); }
+.attendance-bar.warn { border-color: var(--warn); background: var(--warn-soft); }
+.attendance-bar.warn .attendance-gap { color: var(--warn); font-weight: 600; }
+.attendance-bar.over .attendance-gap { color: var(--danger); font-weight: 600; }
+.attendance-bar.ok .attendance-gap { color: var(--success); font-weight: 600; }
+.attendance-bar.leave { border-color: var(--leave); background: var(--leave-soft); }
+.attendance-bar.leave svg { color: var(--leave); }
+.attendance-bar .attendance-action { margin-left: auto; padding: 4px 10px; font-size: 12px; }

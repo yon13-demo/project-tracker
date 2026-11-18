@@ -18,6 +18,8 @@ import { EntryFields } from '@/components/EntryFields';
 import { DayTimerPanel } from '@/components/DayTimerPanel';
 import { ClampedText } from '@/components/ClampedText';
 import { ScreenshotStrip } from '@/components/ScreenshotStrip';
+import { AttendanceBar } from '@/components/AttendanceBar';
+import { leaveLabel } from '@/lib/attendance';
 import { AdminShotsButton } from '@/components/AdminShotsButton';
 import { useScreenshots } from '@/components/useScreenshots';
 import { entryKey } from '@/lib/screenshots';
@@ -105,6 +107,9 @@ const text = {
     pasteHint: 'Klik, tempel (Ctrl+V) atau seret gambar ke sini', pickProjectFirst: 'Pilih proyek dulu untuk menambah screenshot.',
     maxScreenshots: 'Maksimal 5 screenshot per entri.', noScreenshots: 'Tidak ada screenshot.',
     viewByDay: 'Per hari', viewByProject: 'Per proyek', daysCount: 'hari', totalLabel: 'Total',
+    attendance: 'Absensi', attLoading: 'Memuat absensi…', attUnavailable: 'Absensi tidak tersedia saat ini.', attNotLinked: 'Email ini belum terhubung ke absensi.',
+    attNoClock: 'Tidak ada absen di tanggal ini.', attOnThisDay: 'di tanggal ini', markAsLeave: 'Tandai cuti', attOvertime: 'lembur', hoursUnit: 'jam',
+    attLogged: 'Tercatat', attRemaining: 'belum dialokasikan', attOver: 'lebih dari absensi', attMatch: 'sesuai absensi',
     reviewLeaveNotice: 'Tanggal ini tercatat sebagai cuti. Mengirim akan mengganti cuti dengan jam kerja ini.',
   },
   en: {
@@ -172,6 +177,9 @@ const text = {
     pasteHint: 'Click, paste (Ctrl+V) or drop an image here', pickProjectFirst: 'Choose the project first to add screenshots.',
     maxScreenshots: 'Up to 5 screenshots per entry.', noScreenshots: 'No screenshots.',
     viewByDay: 'By day', viewByProject: 'By project', daysCount: 'days', totalLabel: 'Total',
+    attendance: 'Attendance', attLoading: 'Loading attendance…', attUnavailable: 'Attendance is unavailable right now.', attNotLinked: 'This email is not linked to attendance.',
+    attNoClock: 'No clocking on this date.', attOnThisDay: 'on this date', markAsLeave: 'Mark as leave', attOvertime: 'overtime', hoursUnit: 'h',
+    attLogged: 'Logged', attRemaining: 'not assigned yet', attOver: 'more than attendance', attMatch: 'matches attendance',
     reviewLeaveNotice: 'This date is marked as leave. Sending will replace the leave with these work hours.',
   }
 } as const;
@@ -931,11 +939,12 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
 }) {
   const days = getLast45Days();
   const logsByDate = useMemo(() => {
-    const map: Record<string, { isLeave: boolean; entries: DayEntry[] }> = {};
+    const map: Record<string, { isLeave: boolean; leaveNote?: string; entries: DayEntry[] }> = {};
     for (const wl of workLogs) {
       if (!map[wl.log_date]) map[wl.log_date] = { isLeave: false, entries: [] };
       if (wl.is_leave) {
         map[wl.log_date].isLeave = true;
+        map[wl.log_date].leaveNote = wl.description || '';
       } else if (wl.project_id || wl.custom_project_name || (wl.category && wl.category !== 'project')) {
         map[wl.log_date].entries.push({
           project_id: wl.project_id,
@@ -961,6 +970,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
   const [saving, setSaving] = useState(false);
   const [dateEntries, setDateEntries] = useState<EntryDraft[]>([newEntryDraft()]);
   const [isLeaveMode, setIsLeaveMode] = useState(false);
+  const [leaveNote, setLeaveNote] = useState(''); // leave type from attendance, saved as the description
   const addEntryRef = useRef<HTMLButtonElement>(null);
   const [addedEntryId, setAddedEntryId] = useState<string | null>(null);
   const shotDates = useMemo(
@@ -989,6 +999,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
   function loadDate(date: string) {
     const existing = logsByDate[date];
     setIsLeaveMode(Boolean(existing?.isLeave));
+    setLeaveNote('');
     const entries = (existing?.entries || []).map(e => ({
       ...newEntryDraft(),
       category: e.category,
@@ -1029,7 +1040,9 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
   async function handleMarkLeave() {
     setSaving(true);
     await supabase.from('work_logs').delete().eq('user_id', profile.id).eq('log_date', selectedDate);
-    const { error } = await supabase.from('work_logs').insert({ user_id: profile.id, log_date: selectedDate, is_leave: true });
+    const { error } = await supabase.from('work_logs').insert({
+      user_id: profile.id, log_date: selectedDate, is_leave: true, ...(hasV4Schema && leaveNote ? { description: leaveNote } : {}),
+    });
     setSaving(false);
     if (error) showAlert(error.message);
     else { setFormOpen(false); onRefresh(); }
@@ -1072,7 +1085,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
 
             <div className="field">
               <label>{t.jenis}</label>
-              <select value={isLeaveMode ? 'leave' : 'work'} onChange={e => setIsLeaveMode(e.target.value === 'leave')}>
+              <select value={isLeaveMode ? 'leave' : 'work'} onChange={e => { setIsLeaveMode(e.target.value === 'leave'); setLeaveNote(''); }}>
                 <option value="work">{t.kerja}</option>
                 <option value="leave">{t.leaveDay}</option>
               </select>
@@ -1084,6 +1097,10 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
                 onChange={e => e.target.value && loadDate(e.target.value)} />
               {logsByDate[selectedDate] && <p className="worklog-hint">{t.replaceHint}</p>}
             </div>
+
+            <AttendanceBar t={t} date={selectedDate} isLeaveMode={isLeaveMode}
+              loggedHours={dateEntries.reduce((sum, e) => sum + (Number(e.hours) > 0 ? Number(e.hours) : 0), 0)}
+              onMarkLeave={type => { setIsLeaveMode(true); setLeaveNote(leaveLabel(type)); }} />
 
             {!isLeaveMode && (
               <div className="worklog-entries">
@@ -1152,7 +1169,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
                   <div className="worklog-card-top">
                     <strong className="worklog-card-title">{formatCardDate(date, lang)}</strong>
                     {day.isLeave
-                      ? <span className="badge-leave">{t.leaveDay}</span>
+                      ? <span className="badge-leave">{t.leaveDay}{day.leaveNote ? ` · ${day.leaveNote}` : ''}</span>
                       : hasManual
                         ? <span className="hours-badge warn">{t.manual}</span>
                         : <span className="hours-badge">{t.logged}</span>}
