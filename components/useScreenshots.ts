@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_SHOTS_PER_ENTRY, type ShotsByDate } from '@/lib/screenshots';
 import { deleteDayScreenshots, deleteScreenshot, fetchShots, uploadScreenshot } from '@/lib/screenshotClient';
 
@@ -9,14 +9,15 @@ export function useScreenshots(dates: string[], onError: (message: string) => vo
   const [shots, setShots] = useState<ShotsByDate>({});
   const [busy, setBusy] = useState<string | null>(null);
   const datesKey = dates.join(',');
+  const requested = useRef(new Set<string>()); // dates already asked for: a new entry day only fetches that day
 
   useEffect(() => {
-    if (!datesKey) return;
-    let cancelled = false;
-    fetchShots(datesKey.split(','))
-      .then(s => { if (!cancelled) setShots(prev => ({ ...prev, ...s })); })
-      .catch(() => { /* no screenshots yet, or storage not reachable: show none */ });
-    return () => { cancelled = true; };
+    const missing = datesKey ? datesKey.split(',').filter(d => !requested.current.has(d)) : [];
+    if (!missing.length) return;
+    missing.forEach(d => requested.current.add(d));
+    fetchShots(missing)
+      .then(s => setShots(prev => ({ ...prev, ...s })))
+      .catch(() => { missing.forEach(d => requested.current.delete(d)); /* storage not reachable: show none, retry later */ });
   }, [datesKey]);
 
   const upload = useCallback(async (date: string, key: string, files: File[]) => {

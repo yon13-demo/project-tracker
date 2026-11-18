@@ -8,7 +8,7 @@ import type { WorkLog } from '@/lib/worklog';
 import { ScreenshotStrip } from './ScreenshotStrip';
 
 // Admin recap: load one entry's screenshots on demand (no bulk listing of every user).
-export function AdminShotsButton({ t, log }: { t: any; log: WorkLog }) {
+export function AdminShotsButton({ t, log, count }: { t: any; log: WorkLog; count?: number }) {
   const [shots, setShots] = useState<Shot[] | null>(null);
   const [loading, setLoading] = useState(false);
   const key = entryKey({ category: log.category || 'project', project_id: log.project_id, custom_name: log.custom_project_name || '', description: log.description || '' });
@@ -21,7 +21,9 @@ export function AdminShotsButton({ t, log }: { t: any; log: WorkLog }) {
 
   return (
     <>
-      <button className="btn-action" onClick={() => void open()} disabled={loading} title={t.screenshotsTitle}><Camera size={13} /></button>
+      <button className="btn-action shots-count" onClick={() => void open()} disabled={loading} title={t.screenshotsTitle}>
+        <Camera size={13} />{count ? <span>{count}</span> : null}
+      </button>
       {shots && (
         <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShots(null)}>
           <div className="modal shot-modal">

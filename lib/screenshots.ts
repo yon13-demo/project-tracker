@@ -7,7 +7,7 @@ export const MAX_SHOTS_PER_ENTRY = 5;
 export const MAX_SHOT_BYTES = 2 * 1024 * 1024; // after the browser has resized it to WebP
 export const MAX_SHOT_PX = 1600;
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 export const KEY_RE = /^[a-z0-9-]{1,60}$/;
 const FILE_RE = /^[a-z0-9-]{1,60}\.webp$/;
