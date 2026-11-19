@@ -923,22 +923,15 @@ tbody tr:hover { background: #fafbff; }
 .stat-toggle .stat-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .stat-chevron { transition: transform .2s; }
 .stat-toggle.open .stat-chevron { transform: rotate(180deg); color: var(--brand); }
-.stat-hint { margin-top: 2px; font-size: 12px; color: var(--brand); font-weight: 600; }
-.insights { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); display: grid; gap: 14px; }
+.insights { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); display: grid; gap: 16px; }
 .insights-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .insights-sub { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
 .insights-sub span { color: var(--muted); font-size: 12px; }
 .insights-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
 .insights-controls .sort-select { flex: 1 1 260px; min-width: 0; max-width: 100%; }
-.month-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
-.month-pill { display: grid; grid-template-rows: 34px auto auto; justify-items: center; gap: 2px; min-width: 76px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--ink2); font: inherit; cursor: pointer; }
-.month-pill:hover { border-color: var(--brand-border); }
-.month-pill.active { border-color: var(--brand); background: var(--brand-soft); }
-.month-spark { display: flex; align-items: flex-end; width: 14px; height: 34px; }
-.month-spark span { width: 100%; border-radius: 4px 4px 0 0; background: var(--chart-muted); }
-.month-pill.active .month-spark span { background: var(--chart-bar); }
-.month-name { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; }
-.month-hours { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.month-tabs { max-width: 100%; overflow-x: auto; }
+.month-tabs .segmented { flex-wrap: nowrap; }
+.month-tabs .segmented button { white-space: nowrap; }
 .hbars { display: grid; gap: 2px; }
 .hbar { display: grid; grid-template-columns: minmax(180px, 38%) 1fr minmax(110px, auto); align-items: center; gap: 12px; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: none; font: inherit; color: var(--ink); text-align: left; }
 .hbar.clickable { cursor: pointer; }
@@ -950,7 +943,7 @@ tbody tr:hover { background: #fafbff; }
 .hbar-track { position: relative; height: 12px; }
 .hbar-fill { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--chart-bar); }
 .hbar-fill.muted { background: var(--chart-muted); }
-.hbar-value { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.hbar-value { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
 .hbar-sub { font-weight: 500; color: var(--muted); }
 @media (max-width: 640px) {
   .insights { padding: 14px; }
@@ -959,3 +952,42 @@ tbody tr:hover { background: #fafbff; }
   .hbar-track { grid-column: 1; }
   .hbar-value { grid-column: 2; }
 }
+
+/* Categorical series (validated reference palette; dark steps chosen for the dark surface) */
+:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948; }
+:root[data-theme="dark"] { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767; }
+
+/* Tape bars: full-width track, fill = share of the month */
+.hbar-track.tape { background: var(--line2); border-radius: 4px; overflow: hidden; height: 10px; }
+.hbar-track.tape .hbar-fill { border-radius: 4px; }
+.insights-gap { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+/* Monthly grouped columns */
+.mcols { margin: 0; display: grid; gap: 12px; }
+.mcols-plot { display: flex; align-items: stretch; gap: 8px; height: 200px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.mcols-group { flex: 1 0 96px; display: grid; grid-template-rows: 1fr auto; gap: 6px; padding: 6px 6px 0; border: 0; border-radius: 8px 8px 0 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+.mcols-group:hover { background: var(--line2); }
+.mcols-group.active { background: var(--brand-soft); }
+.mcols-bars { display: flex; align-items: flex-end; justify-content: center; gap: 2px; min-height: 0; }
+.mcols-col { flex: 0 1 28px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 14px; }
+.mcols-val { font-size: 11px; font-weight: 600; color: var(--ink2); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+.mcols-fill { display: block; width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; }
+.mcols-month { font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; padding-bottom: 6px; }
+.mcols-group.active .mcols-month { color: var(--brand); }
+.mcols-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink2); }
+.mcols-key { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
+.mcols-key strong { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.mcols-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+@media (max-width: 640px) {
+  .mcols-plot { height: 170px; }
+  .mcols-group { flex-basis: 84px; }
+}
+
+/* Stacked tape: one piece per person, 2px surface gap between pieces */
+.hbar-track.stacked { display: flex; }
+.hbar-seg { display: block; height: 100%; flex-shrink: 0; box-shadow: inset -2px 0 0 var(--card); }
+.hbar-seg:last-child { box-shadow: none; border-radius: 0 4px 4px 0; }
+.hbar-seg:first-child { border-radius: 4px 0 0 4px; }
+.hbar-seg:only-child { border-radius: 4px; }
+.hbar-seg:hover { filter: brightness(1.15); }
+.people-legend { margin-bottom: 8px; }

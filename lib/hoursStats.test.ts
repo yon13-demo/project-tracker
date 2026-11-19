@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { monthTotals, personHoursForProject, projectHoursForMonth, projectKeyOf, projectOptions } from './hoursStats';
+import { peopleInMonth, splitByPerson, colorSlots, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectKeyOf, projectOptions } from './hoursStats';
 import type { WorkLog } from './worklog';
 
 let n = 0;
@@ -68,5 +68,38 @@ describe('personHoursForProject', () => {
 describe('projectOptions', () => {
   it('lists every project that has hours, by name', () => {
     expect(projectOptions(logs).map(o => o.key)).toEqual(['p:p1', 'p:p2', 'c:quotation', 'm:survey lokasi']);
+  });
+});
+
+describe('topProjectsByMonth', () => {
+  it('keeps the top projects of each month, oldest month first, without Quotation/Training', () => {
+    const r = topProjectsByMonth(logs, 2);
+    expect(r.map(m => m.month)).toEqual(['2026-10', '2026-11']);
+    expect(r[0].top.map(p => [p.key, p.hours])).toEqual([['p:p1', 9], ['p:p2', 5]]);
+    expect(r[1].top.map(p => [p.key, p.hours])).toEqual([['p:p1', 13]]);
+  });
+  it('shows only the latest months when asked', () => {
+    expect(topProjectsByMonth(logs, 3, 1).map(m => m.month)).toEqual(['2026-11']);
+  });
+});
+
+describe('colorSlots', () => {
+  it('gives each project one slot, the busiest project first, the rest none', () => {
+    const r = topProjectsByMonth(logs, 2);
+    expect(colorSlots(r, 1)).toEqual(new Map([['p:p1', 0]]));
+    expect(colorSlots(r, 8)).toEqual(new Map([['p:p1', 0], ['p:p2', 1]]));
+  });
+});
+
+describe('people in a month', () => {
+  it('ranks people by their hours in the month', () => {
+    expect(peopleInMonth(logs, '2026-10').map(p => [p.userId, p.hours])).toEqual([['u1', 14], ['u2', 3]]);
+  });
+  it('splits one or more projects by person, busiest first', () => {
+    expect(splitByPerson(logs, '2026-10', ['p:p1'])).toEqual([
+      { userId: 'u1', name: 'Andi', hours: 6 },
+      { userId: 'u2', name: 'Budi', hours: 3 },
+    ]);
+    expect(splitByPerson(logs, '2026-10', ['p:p2', 'c:quotation'])).toEqual([{ userId: 'u1', name: 'Andi', hours: 7 }]);
   });
 });

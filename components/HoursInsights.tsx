@@ -1,10 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { monthTotals, personHoursForProject, projectHoursForMonth, projectOptions, type ProjectHours } from '@/lib/hoursStats';
+import { MonthColumns } from './MonthColumns';
+import { peopleInMonth, splitByPerson, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectOptions, type ProjectHours } from '@/lib/hoursStats';
 import type { WorkLog } from '@/lib/worklog';
 
 const TOP = 12;
+const PEOPLE_COLOURS = 7;
 const fmt = (n: number) => String(Math.round(n * 10) / 10);
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
@@ -23,18 +25,23 @@ function Segmented<V extends string>({ value, options, onChange }: { value: V; o
 }
 
 // One labelled horizontal bar; the value is printed beside it, so no axis is needed.
-function Bar({ label, sub, value, ratio, muted, title, onClick }: {
-  label: React.ReactNode; sub?: string; value: string; ratio: number; muted?: boolean; title: string; onClick?: () => void;
+type Segment = { key: string; ratio: number; color: string; title: string };
+
+function Bar({ label, sub, value, ratio, muted, tape, segments, title, onClick }: {
+  label: React.ReactNode; sub?: string; value: string; ratio: number; muted?: boolean; tape?: boolean; segments?: Segment[]; title: string; onClick?: () => void;
 }) {
+  const fill = segments?.length
+    ? segments.map(g => <span key={g.key} className="hbar-seg" style={{ width: `${g.ratio * 100}%`, background: g.color }} title={g.title} />)
+    : <span className={`hbar-fill${muted ? ' muted' : ''}`} style={{ width: `${Math.max(ratio * 100, 0.8)}%` }} />;
   const body = (
     <>
       <span className="hbar-label">{label}</span>
-      <span className="hbar-track"><span className={`hbar-fill${muted ? ' muted' : ''}`} style={{ width: `${Math.max(ratio * 100, 0.8)}%` }} /></span>
+      <span className={`hbar-track${tape ? ' tape' : ''}${segments?.length ? ' stacked' : ''}`}>{fill}</span>
       <span className="hbar-value">{value}{sub && <span className="hbar-sub"> · {sub}</span>}</span>
     </>
   );
   return onClick
-    ? <button type="button" className="hbar clickable" title={title} onClick={onClick}>{body}</button>
+    ? <button type="button" className={`hbar clickable${tape ? ' is-tape' : ''}`} title={title} onClick={onClick}>{body}</button>
     : <div className="hbar" title={title}>{body}</div>;
 }
 
@@ -55,8 +62,26 @@ export function HoursInsights({ t, lang, logs }: { t: any; lang: 'id' | 'en'; lo
   const shownProjects = showAll ? projects : projects.slice(0, TOP);
   const rest = showAll ? [] : projects.slice(TOP);
   const restHours = rest.reduce((s, r) => s + r.hours, 0);
-  const maxRow = Math.max(...rows.map(r => r.hours), restHours, 1);
-  const maxMonth = Math.max(...months.map(m => m.hours), 1);
+  const tops = useMemo(() => topProjectsByMonth(logs, 3), [logs]);
+
+  // Stacked tape: each row's fill is cut by person. The month's 7 busiest people keep one colour
+  // in every row; everyone else is merged into one grey piece per row.
+  const monthPeople = useMemo(() => peopleInMonth(logs, month), [logs, month]);
+  // The busiest row fills the track; every row keeps its proportion to it (labels carry the % of the month).
+  const scale = Math.max(...rows.map(r => r.hours), rest.reduce((s, r) => s + r.hours, 0), 1);
+  const personSlot = new Map(monthPeople.slice(0, PEOPLE_COLOURS).map((p, i) => [p.userId, i]));
+  const segmentsFor = (keys: string[]): Segment[] => {
+    const split = splitByPerson(logs, month, keys);
+    const rowHours = split.reduce((s, p) => s + p.hours, 0) || 1;
+    const share = (h: number) => `${fmt(h)} ${t.hoursUnit} · ${pct(h / rowHours)} ${t.ofThisRow} · ${pct(h / (monthTotal || 1))} ${t.ofThisMonth}`;
+    const named = split.filter(p => personSlot.has(p.userId)).sort((a, b) => personSlot.get(a.userId)! - personSlot.get(b.userId)!);
+    const rest = split.filter(p => !personSlot.has(p.userId));
+    const restHours = rest.reduce((s, p) => s + p.hours, 0);
+    const out = named.map(p => ({ key: p.userId, ratio: p.hours / scale, color: `var(--series-${personSlot.get(p.userId)! + 1})`, title: `${p.name}: ${share(p.hours)}` }));
+    if (rest.length) out.push({ key: 'rest', ratio: restHours / scale, color: 'var(--chart-muted)', title: `${t.others} (${rest.length} ${t.peopleCount}): ${share(restHours)}
+${rest.map(p => `${p.name} ${fmt(p.hours)} ${t.hoursUnit}`).join(', ')}` });
+    return out;
+  };
 
   const selectedKey = projectKey || projects[0]?.key || options[0]?.key || '';
   const people = useMemo(() => personHoursForProject(logs, selectedKey, scope === 'month' ? month : null), [logs, selectedKey, scope, month]);
@@ -74,39 +99,45 @@ export function HoursInsights({ t, lang, logs }: { t: any; lang: 'id' | 'en'; lo
     <div className="insights">
       <div className="insights-head">
         <Segmented value={tab} onChange={setTab} options={[{ value: 'month', label: t.perMonth }, { value: 'project', label: t.perProject }]} />
+      <div className="month-tabs">
+        <Segmented value={month} onChange={m => { setMonth(m); setShowAll(false); }}
+          options={months.map(m => ({ value: m.month, label: monthLabel(m.month, lang) }))} />
       </div>
-
-      <div className="month-strip" role="tablist" aria-label={t.perMonth}>
-        {months.map(m => (
-          <button key={m.month} type="button" role="tab" aria-selected={m.month === month}
-            className={`month-pill${m.month === month ? ' active' : ''}`} onClick={() => { setMonth(m.month); setShowAll(false); }}
-            title={`${monthLabel(m.month, lang, true)}: ${fmt(m.hours)} ${t.hoursUnit}`}>
-            <span className="month-spark"><span style={{ height: `${Math.max((m.hours / maxMonth) * 100, 6)}%` }} /></span>
-            <span className="month-name">{monthLabel(m.month, lang)}</span>
-            <span className="month-hours">{fmt(m.hours)} {t.hoursUnit}</span>
-          </button>
-        ))}
       </div>
 
       {tab === 'month' ? (
         <section>
           <div className="insights-sub">
+            <strong>{t.top3PerMonth}</strong>
+          </div>
+          <MonthColumns t={t} data={tops} selected={month} label={m => monthLabel(m, lang)} onSelect={m => { setMonth(m); setShowAll(false); }} />
+          <div className="insights-sub insights-gap">
             <strong>{monthLabel(month, lang, true)}</strong>
-            <span>{fmt(monthTotal)} {t.hoursUnit} · {projects.length} {t.projectsCount}</span>
+            <span>{fmt(monthTotal)} {t.hoursUnit}</span>
           </div>
           {!rows.length && <div className="records-empty">{t.noData}</div>}
+          {rows.length > 0 && (
+            <div className="mcols-legend people-legend">
+              {monthPeople.slice(0, PEOPLE_COLOURS).map((p, i) => (
+                <span key={p.userId} className="mcols-key"><span className="mcols-swatch" style={{ background: `var(--series-${i + 1})` }} />{p.name}</span>
+              ))}
+              {monthPeople.length > PEOPLE_COLOURS && (
+                <span className="mcols-key"><span className="mcols-swatch" style={{ background: 'var(--chart-muted)' }} />{t.others} ({monthPeople.length - PEOPLE_COLOURS} {t.peopleCount})</span>
+              )}
+            </div>
+          )}
           <div className="hbars">
             {shownProjects.map(r => (
-              <Bar key={r.key} label={projectLabel(r)} value={`${fmt(r.hours)} ${t.hoursUnit}`} sub={pct(r.share)} ratio={r.hours / maxRow}
-                title={`${r.code ? r.code + ' · ' : ''}${r.name}: ${fmt(r.hours)} ${t.hoursUnit} (${pct(r.share)}) — ${t.seePeople}`} onClick={() => openProject(r)} />
+              <Bar key={r.key} tape segments={segmentsFor([r.key])} label={projectLabel(r)} value={pct(r.share)} sub={`${fmt(r.hours)} ${t.hoursUnit}`} ratio={r.hours / scale}
+                title={`${r.code ? r.code + ' · ' : ''}${r.name}: ${pct(r.share)} (${fmt(r.hours)} ${t.hoursUnit})`} onClick={() => openProject(r)} />
             ))}
             {rest.length > 0 && (
-              <Bar muted label={<span className="hbar-name">{t.others} ({rest.length})</span>} value={`${fmt(restHours)} ${t.hoursUnit}`}
-                sub={pct(monthTotal ? restHours / monthTotal : 0)} ratio={restHours / maxRow} title={t.showAllProjects} onClick={() => setShowAll(true)} />
+              <Bar muted tape segments={segmentsFor(rest.map(r => r.key))} label={<span className="hbar-name">{t.others} ({rest.length})</span>} value={pct(monthTotal ? restHours / monthTotal : 0)}
+                sub={`${fmt(restHours)} ${t.hoursUnit}`} ratio={restHours / scale} title={t.showAllProjects} onClick={() => setShowAll(true)} />
             )}
             {others.map(r => (
-              <Bar key={r.key} muted label={<span className="hbar-name">{r.name}</span>} value={`${fmt(r.hours)} ${t.hoursUnit}`} sub={pct(r.share)}
-                ratio={r.hours / maxRow} title={`${r.name}: ${fmt(r.hours)} ${t.hoursUnit} — ${t.seePeople}`} onClick={() => openProject(r)} />
+              <Bar key={r.key} muted tape segments={segmentsFor([r.key])} label={<span className="hbar-name">{r.name}</span>} value={pct(r.share)} sub={`${fmt(r.hours)} ${t.hoursUnit}`}
+                ratio={r.hours / scale} title={`${r.name}: ${pct(r.share)} (${fmt(r.hours)} ${t.hoursUnit})`} onClick={() => openProject(r)} />
             ))}
           </div>
         </section>
@@ -120,7 +151,7 @@ export function HoursInsights({ t, lang, logs }: { t: any; lang: 'id' | 'en'; lo
           </div>
           <div className="insights-sub">
             <strong>{options.find(o => o.key === selectedKey)?.name}</strong>
-            <span>{fmt(peopleTotal)} {t.hoursUnit} · {people.length} {t.peopleCount}</span>
+            <span>{fmt(peopleTotal)} {t.hoursUnit}</span>
           </div>
           {!people.length && <div className="records-empty">{t.noHoursThisMonth}</div>}
           <div className="hbars">
