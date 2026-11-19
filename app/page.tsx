@@ -106,7 +106,7 @@ const text = {
     backToTimer: 'Kembali ke timer', send: 'Kirim', daySent: 'Hari terkirim.', reviewTotal: 'Total jam',
     reviewZeroHint: 'Baris 0 jam tidak disimpan.',
     inDevelopment: 'Dalam pengembangan', expand: 'Buka', collapse: 'Ciutkan',
-    showMore: 'Lihat selengkapnya', showLess: 'Tutup', noDescription: 'Tanpa deskripsi', entriesCount: 'entri', showMoreRows: 'Tampilkan lagi', ofTotal: 'dari', projectCol: 'Proyek', projectsCount: 'proyek', peopleCount: 'orang', searchProject: 'Cari nomor, nama atau perusahaan…', searchPerson: 'Cari nama atau email…', you: 'Anda', perMonth: 'Per bulan', perProject: 'Per proyek', allTime: 'Semua waktu', others: 'Lainnya', daysUnit: 'hari', pickProject: 'Pilih proyek', seePeople: 'klik untuk lihat siapa saja', showAllProjects: 'Tampilkan semua proyek', noHoursThisMonth: 'Belum ada jam di periode ini', showDetails: 'Lihat rincian', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshot',
+    showMore: 'Lihat selengkapnya', showLess: 'Tutup', noDescription: 'Tanpa deskripsi', entriesCount: 'entri', showMoreRows: 'Tampilkan lagi', ofTotal: 'dari', projectCol: 'Proyek', projectsCount: 'proyek', peopleCount: 'orang', searchProject: 'Cari nomor, nama atau perusahaan…', searchPerson: 'Cari nama atau email…', you: 'Anda', perMonth: 'Per bulan', top3PerMonth: '3 proyek teratas per bulan', ofThisRow: 'dari proyek ini', ofThisMonth: 'dari bulan ini', perProject: 'Per proyek', allTime: 'Semua waktu', others: 'Lainnya', daysUnit: 'hari', pickProject: 'Pilih proyek', showAllProjects: 'Tampilkan semua proyek', noHoursThisMonth: 'Belum ada jam di periode ini', showDetails: 'Lihat rincian', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshot',
     pasteHint: 'Klik, tempel (Ctrl+V) atau seret gambar ke sini', pickProjectFirst: 'Pilih proyek dulu untuk menambah screenshot.',
     maxScreenshots: 'Maksimal 5 screenshot per entri.', noScreenshots: 'Tidak ada screenshot.',
     viewByDay: 'Per hari', viewByProject: 'Per proyek', daysCount: 'hari', totalLabel: 'Total',
@@ -176,7 +176,7 @@ const text = {
     backToTimer: 'Back to timer', send: 'Send', daySent: 'Day sent.', reviewTotal: 'Total hours',
     reviewZeroHint: 'Rows with 0 hours are not saved.',
     inDevelopment: 'In development', expand: 'Expand', collapse: 'Collapse',
-    showMore: 'Show more', showLess: 'Show less', noDescription: 'No description', entriesCount: 'entries', showMoreRows: 'Show more', ofTotal: 'of', projectCol: 'Project', projectsCount: 'projects', peopleCount: 'people', searchProject: 'Search number, name or company…', searchPerson: 'Search name or email…', you: 'you', perMonth: 'By month', perProject: 'By project', allTime: 'All time', others: 'Others', daysUnit: 'days', pickProject: 'Choose project', seePeople: 'click to see who worked on it', showAllProjects: 'Show all projects', noHoursThisMonth: 'No hours in this period', showDetails: 'Show details', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshots',
+    showMore: 'Show more', showLess: 'Show less', noDescription: 'No description', entriesCount: 'entries', showMoreRows: 'Show more', ofTotal: 'of', projectCol: 'Project', projectsCount: 'projects', peopleCount: 'people', searchProject: 'Search number, name or company…', searchPerson: 'Search name or email…', you: 'you', perMonth: 'By month', top3PerMonth: 'Top 3 projects per month', ofThisRow: 'of this project', ofThisMonth: 'of the month', perProject: 'By project', allTime: 'All time', others: 'Others', daysUnit: 'days', pickProject: 'Choose project', showAllProjects: 'Show all projects', noHoursThisMonth: 'No hours in this period', showDetails: 'Show details', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshots',
     pasteHint: 'Click, paste (Ctrl+V) or drop an image here', pickProjectFirst: 'Choose the project first to add screenshots.',
     maxScreenshots: 'Up to 5 screenshots per entry.', noScreenshots: 'No screenshots.',
     viewByDay: 'By day', viewByProject: 'By project', daysCount: 'days', totalLabel: 'Total',
@@ -1308,10 +1308,9 @@ function AdminView({
           <div className="stat-label">{t.totalUsers}</div>
           <div className="stat-number">{visibleEmployeeUsers.length}</div>
         </div>
-        <button type="button" className={`stat-card stat-toggle${showInsights ? ' open' : ''}`} onClick={() => setShowInsights(v => !v)} aria-expanded={showInsights}>
-          <div className="stat-label">{t.totalHours}<ChevronDown size={15} className="stat-chevron" /></div>
+        <button type="button" className={`stat-card stat-toggle${showInsights ? ' open' : ''}`} onClick={() => setShowInsights(v => !v)} aria-expanded={showInsights} aria-label={`${t.totalHours}: ${t.showDetails}`}>
+          <div className="stat-label">{t.totalHours}<ChevronDown size={15} className="stat-chevron" aria-hidden /></div>
           <div className="stat-number">{Math.round(totalHours * 10) / 10}</div>
-          <div className="stat-hint">{t.showDetails}</div>
         </button>
       </div>
       {showInsights && <HoursInsights t={t} lang={lang} logs={workLogs} />}

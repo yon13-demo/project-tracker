@@ -67,3 +67,45 @@ export function projectOptions(logs: WorkLog[]): ProjectOption[] {
   }
   return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
+
+export type MonthTop = { month: string; total: number; top: ProjectHours[] };
+
+// The n busiest projects (Quotation/Training excluded) of each of the latest `lastMonths` months, oldest first.
+export function topProjectsByMonth(logs: WorkLog[], n: number, lastMonths = 6): MonthTop[] {
+  return monthTotals(logs).slice(-lastMonths).map(({ month, hours }) => ({
+    month, total: hours,
+    top: projectHoursForMonth(logs, month).filter(r => r.category === 'project').slice(0, n),
+  }));
+}
+
+// Colour follows the project, not its rank: the projects on screen get slots in order of
+// their summed hours, so a project keeps one colour in every month. Past `slots`, none.
+export function colorSlots(months: MonthTop[], slots: number): Map<string, number> {
+  const sum = new Map<string, number>();
+  for (const m of months) for (const p of m.top) sum.set(p.key, (sum.get(p.key) ?? 0) + p.hours);
+  const order = [...sum].sort((a, b) => b[1] - a[1]).slice(0, slots).map(([k]) => k);
+  return new Map(order.map((k, i) => [k, i]));
+}
+
+export type PersonShare = { userId: string; name: string; hours: number };
+
+function sumByPerson(logs: WorkLog[], keep: (l: WorkLog) => boolean): PersonShare[] {
+  const m = new Map<string, PersonShare>();
+  for (const l of work(logs)) {
+    if (!keep(l)) continue;
+    const p = m.get(l.user_id) ?? { userId: l.user_id, name: l.profiles?.full_name || '—', hours: 0 };
+    p.hours += l.hours || 0;
+    m.set(l.user_id, p);
+  }
+  return [...m.values()].sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name));
+}
+
+// Everyone's hours in a month, busiest first (decides who gets a colour).
+export const peopleInMonth = (logs: WorkLog[], month: string) =>
+  sumByPerson(logs, l => l.log_date.startsWith(month));
+
+// Who made up the hours of one or more projects (rows) in a month.
+export function splitByPerson(logs: WorkLog[], month: string, keys: string[]): PersonShare[] {
+  const wanted = new Set(keys);
+  return sumByPerson(logs, l => l.log_date.startsWith(month) && wanted.has(projectKeyOf(l)));
+}
