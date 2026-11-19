@@ -5,7 +5,7 @@ import { Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { clockTime, formatHours, hoursGap, leaveLabel, type AttendanceDay, type LeaveType } from '@/lib/attendance';
 
-type State = { status: 'loading' } | { status: 'error' } | { status: 'ok'; day: AttendanceDay };
+export type AttendanceState = { status: 'loading' } | { status: 'error' } | { status: 'ok'; day: AttendanceDay };
 
 async function fetchAttendance(date: string): Promise<AttendanceDay> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -14,22 +14,31 @@ async function fetchAttendance(date: string): Promise<AttendanceDay> {
   return res.json();
 }
 
-// What the attendance system says about the selected date, next to what is logged in Weave.
-// Read-only reference: it never changes entries by itself; "Mark as leave" only switches the form.
-export function AttendanceBar({ t, date, loggedHours, isLeaveMode, onMarkLeave }: {
-  t: any; date: string; loggedHours: number; isLeaveMode: boolean; onMarkLeave: (type: LeaveType) => void;
-}) {
-  const [state, setState] = useState<State>({ status: 'loading' });
-
+// Attendance for one date, shared by the attendance bar and the allocation bar.
+export function useAttendance(date: string): AttendanceState {
+  const [state, setState] = useState<AttendanceState>({ status: 'loading' });
   useEffect(() => {
     let cancelled = false;
     setState({ status: 'loading' });
+    if (!date) return; // form closed: nothing to fetch
     fetchAttendance(date)
       .then(day => { if (!cancelled) setState({ status: 'ok', day }); })
       .catch(() => { if (!cancelled) setState({ status: 'error' }); });
     return () => { cancelled = true; };
   }, [date]);
+  return state;
+}
 
+// Attendance hours worth splitting: a matched, clocked day that is not leave.
+export function clockedHours(state: AttendanceState): number | null {
+  return state.status === 'ok' && state.day.matched && !state.day.leave ? state.day.hours : null;
+}
+
+// What the attendance system says about the selected date, next to what is logged in Weave.
+// Read-only reference: it never changes entries by itself; "Mark as leave" only switches the form.
+export function AttendanceBar({ t, state, loggedHours, isLeaveMode, onMarkLeave }: {
+  t: any; state: AttendanceState; loggedHours: number; isLeaveMode: boolean; onMarkLeave: (type: LeaveType) => void;
+}) {
   if (state.status === 'loading') return <div className="attendance-bar muted"><Clock size={14} /> {t.attLoading}</div>;
   if (state.status === 'error') return <div className="attendance-bar muted"><Clock size={14} /> {t.attUnavailable}</div>;
   const { day } = state;
