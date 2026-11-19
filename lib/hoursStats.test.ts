@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { monthTotals, personHoursForProject, projectHoursForMonth, projectKeyOf, projectOptions, personOptions, monthRange, roundPercents } from './hoursStats';
+import { peopleInMonth, splitByPerson, colorSlots, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectKeyOf, projectOptions, personOptions, personMonths, monthRange, roundPercents, composition } from './hoursStats';
 import type { WorkLog } from './worklog';
 
 let n = 0;
@@ -71,6 +71,39 @@ describe('projectOptions', () => {
   });
 });
 
+describe('topProjectsByMonth', () => {
+  it('keeps the top projects of each month, oldest month first, without Quotation/Training', () => {
+    const r = topProjectsByMonth(logs, 2);
+    expect(r.map(m => m.month)).toEqual(['2026-10', '2026-11']);
+    expect(r[0].top.map(p => [p.key, p.hours])).toEqual([['p:p1', 9], ['p:p2', 5]]);
+    expect(r[1].top.map(p => [p.key, p.hours])).toEqual([['p:p1', 13]]);
+  });
+  it('shows only the latest months when asked', () => {
+    expect(topProjectsByMonth(logs, 3, 1).map(m => m.month)).toEqual(['2026-11']);
+  });
+});
+
+describe('colorSlots', () => {
+  it('gives each project one slot, the busiest project first, the rest none', () => {
+    const r = topProjectsByMonth(logs, 2);
+    expect(colorSlots(r, 1)).toEqual(new Map([['p:p1', 0]]));
+    expect(colorSlots(r, 8)).toEqual(new Map([['p:p1', 0], ['p:p2', 1]]));
+  });
+});
+
+describe('people in a month', () => {
+  it('ranks people by their hours in the month', () => {
+    expect(peopleInMonth(logs, '2026-10').map(p => [p.userId, p.hours])).toEqual([['u1', 14], ['u2', 3]]);
+  });
+  it('splits one or more projects by person, busiest first', () => {
+    expect(splitByPerson(logs, '2026-10', ['p:p1'])).toEqual([
+      { userId: 'u1', name: 'Andi', hours: 6 },
+      { userId: 'u2', name: 'Budi', hours: 3 },
+    ]);
+    expect(splitByPerson(logs, '2026-10', ['p:p2', 'c:quotation'])).toEqual([{ userId: 'u1', name: 'Andi', hours: 7 }]);
+  });
+});
+
 describe('personOptions', () => {
   it('lists everyone with work hours, by name, with their total', () => {
     expect(personOptions(logs)).toEqual([
@@ -94,3 +127,28 @@ describe('roundPercents', () => {
   });
 });
 
+describe('composition', () => {
+  const item = (key: string, hours: number) => ({ key, code: '', name: key, category: 'project' as const, manual: false, hours, share: 0 });
+  it('keeps pieces of at least 5% and merges the rest into one Lainnya piece', () => {
+    const c = composition([item('a', 114.5), item('b', 2), item('c', 2), item('d', 1.5), item('e', 3)]);
+    expect(c.map(s => [s.key, s.hours])).toEqual([['a', 114.5], ['rest', 8.5]]);
+    expect(c[1].items.map(i => i.key)).toEqual(['e', 'b', 'c', 'd']);
+    expect(c.map(s => s.pct)).toEqual([93, 7]);
+  });
+  it('has no Lainnya piece when nothing is small', () => {
+    expect(composition([item('a', 6), item('b', 4)]).map(s => s.key)).toEqual(['a', 'b']);
+  });
+});
+
+describe('personMonths', () => {
+  const months = ['2026-09', '2026-10', '2026-11'];
+  it('gives every month asked for, with the person projects busiest first', () => {
+    const m = personMonths(logs, 'u1', months);
+    expect(m.map(x => [x.month, x.total])).toEqual([['2026-09', 0], ['2026-10', 14], ['2026-11', 6]]);
+    expect(m[1].top.map(p => [p.key, p.hours])).toEqual([['p:p1', 6], ['p:p2', 5], ['c:quotation', 2], ['m:survey lokasi', 1]]);
+    expect(m[1].top[0].share).toBeCloseTo(6 / 14);
+  });
+  it('is empty for someone without hours', () => {
+    expect(personMonths(logs, 'nobody', months).every(m => m.total === 0 && m.top.length === 0)).toBe(true);
+  });
+});
