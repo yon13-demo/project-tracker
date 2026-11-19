@@ -19,11 +19,12 @@ import { EntryFields } from '@/components/EntryFields';
 import { DayTimerPanel } from '@/components/DayTimerPanel';
 import { ClampedText } from '@/components/ClampedText';
 import { ScreenshotStrip } from '@/components/ScreenshotStrip';
-import { AttendanceBar } from '@/components/AttendanceBar';
+import { AttendanceBar, clockedHours, useAttendance } from '@/components/AttendanceBar';
+import { AllocationBar, entryColor } from '@/components/AllocationBar';
 import { leaveLabel } from '@/lib/attendance';
 import { RecordsTable } from '@/components/RecordsTable';
 import { EmployeeList, ProjectList } from '@/components/AdminLists';
-import { HoursInsights } from '@/components/HoursInsights';
+import { HoursHero } from '@/components/HoursHero';
 import { useScreenshots } from '@/components/useScreenshots';
 import { entryKey } from '@/lib/screenshots';
 
@@ -106,13 +107,14 @@ const text = {
     backToTimer: 'Kembali ke timer', send: 'Kirim', daySent: 'Hari terkirim.', reviewTotal: 'Total jam',
     reviewZeroHint: 'Baris 0 jam tidak disimpan.',
     inDevelopment: 'Dalam pengembangan', expand: 'Buka', collapse: 'Ciutkan',
-    showMore: 'Lihat selengkapnya', showLess: 'Tutup', noDescription: 'Tanpa deskripsi', entriesCount: 'entri', showMoreRows: 'Tampilkan lagi', ofTotal: 'dari', projectCol: 'Proyek', projectsCount: 'proyek', peopleCount: 'orang', searchProject: 'Cari nomor, nama atau perusahaan…', searchPerson: 'Cari nama atau email…', you: 'Anda', perMonth: 'Per bulan', top3PerMonth: '3 proyek teratas per bulan', ofThisRow: 'dari proyek ini', ofThisMonth: 'dari bulan ini', perProject: 'Per proyek', allTime: 'Semua waktu', others: 'Lainnya', daysUnit: 'hari', pickProject: 'Pilih proyek', showAllProjects: 'Tampilkan semua proyek', noHoursThisMonth: 'Belum ada jam di periode ini', showDetails: 'Lihat rincian', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshot',
+    showMore: 'Lihat selengkapnya', showLess: 'Tutup', noDescription: 'Tanpa deskripsi', entriesCount: 'entri', showMoreRows: 'Tampilkan lagi', ofTotal: 'dari', projectCol: 'Proyek', projectsCount: 'proyek', peopleCount: 'orang', searchProject: 'Cari nomor, nama atau perusahaan…', searchPerson: 'Cari nama atau email…', you: 'Anda', perMonth: 'Per bulan', top3PerMonth: '3 proyek teratas per bulan', ofThisRow: 'dari proyek ini', ofThisMonth: 'dari bulan ini', perProject: 'Per proyek', allTime: 'Semua waktu', others: 'Lainnya', daysUnit: 'hari', pickProject: 'Pilih proyek', showAllProjects: 'Tampilkan semua proyek', noHoursThisMonth: 'Belum ada jam di periode ini', showDetails: 'Lihat rincian', hideDetails: 'Tutup rincian', hoursPerMonth: 'Jam per bulan', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshot',
     pasteHint: 'Klik, tempel (Ctrl+V) atau seret gambar ke sini', pickProjectFirst: 'Pilih proyek dulu untuk menambah screenshot.',
     maxScreenshots: 'Maksimal 5 screenshot per entri.', noScreenshots: 'Tidak ada screenshot.',
     viewByDay: 'Per hari', viewByProject: 'Per proyek', daysCount: 'hari', totalLabel: 'Total',
     attendance: 'Absensi', attLoading: 'Memuat absensi…', attUnavailable: 'Absensi tidak tersedia saat ini.', attNotLinked: 'Email ini belum terhubung ke absensi.',
     attNoClock: 'Tidak ada absen di tanggal ini.', attOnThisDay: 'di tanggal ini', markAsLeave: 'Tandai cuti', attOvertime: 'lembur', hoursUnit: 'jam',
     attLogged: 'Tercatat', attRemaining: 'belum dialokasikan', attOver: 'lebih dari absensi', attMatch: 'sesuai absensi',
+    allocTitle: 'Bagi jam absensi', allocTitleNoAtt: 'Bagi jam kerja', allocPick: 'Pilih proyek', allocFree: 'belum dialokasikan', allocBreakNote: 'boleh dibiarkan untuk istirahat', allocFill: 'Isi sisa', allocFillInto: 'Isi sisa ke pekerjaan', allocDragToAdd: 'Tarik untuk menambah pekerjaan',
     reviewLeaveNotice: 'Tanggal ini tercatat sebagai cuti. Mengirim akan mengganti cuti dengan jam kerja ini.',
   },
   en: {
@@ -176,13 +178,14 @@ const text = {
     backToTimer: 'Back to timer', send: 'Send', daySent: 'Day sent.', reviewTotal: 'Total hours',
     reviewZeroHint: 'Rows with 0 hours are not saved.',
     inDevelopment: 'In development', expand: 'Expand', collapse: 'Collapse',
-    showMore: 'Show more', showLess: 'Show less', noDescription: 'No description', entriesCount: 'entries', showMoreRows: 'Show more', ofTotal: 'of', projectCol: 'Project', projectsCount: 'projects', peopleCount: 'people', searchProject: 'Search number, name or company…', searchPerson: 'Search name or email…', you: 'you', perMonth: 'By month', top3PerMonth: 'Top 3 projects per month', ofThisRow: 'of this project', ofThisMonth: 'of the month', perProject: 'By project', allTime: 'All time', others: 'Others', daysUnit: 'days', pickProject: 'Choose project', showAllProjects: 'Show all projects', noHoursThisMonth: 'No hours in this period', showDetails: 'Show details', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshots',
+    showMore: 'Show more', showLess: 'Show less', noDescription: 'No description', entriesCount: 'entries', showMoreRows: 'Show more', ofTotal: 'of', projectCol: 'Project', projectsCount: 'projects', peopleCount: 'people', searchProject: 'Search number, name or company…', searchPerson: 'Search name or email…', you: 'you', perMonth: 'By month', top3PerMonth: 'Top 3 projects per month', ofThisRow: 'of this project', ofThisMonth: 'of the month', perProject: 'By project', allTime: 'All time', others: 'Others', daysUnit: 'days', pickProject: 'Choose project', showAllProjects: 'Show all projects', noHoursThisMonth: 'No hours in this period', showDetails: 'Show details', hideDetails: 'Hide details', hoursPerMonth: 'Hours per month', addScreenshot: '+ Screenshot', screenshotsTitle: 'Screenshots',
     pasteHint: 'Click, paste (Ctrl+V) or drop an image here', pickProjectFirst: 'Choose the project first to add screenshots.',
     maxScreenshots: 'Up to 5 screenshots per entry.', noScreenshots: 'No screenshots.',
     viewByDay: 'By day', viewByProject: 'By project', daysCount: 'days', totalLabel: 'Total',
     attendance: 'Attendance', attLoading: 'Loading attendance…', attUnavailable: 'Attendance is unavailable right now.', attNotLinked: 'This email is not linked to attendance.',
     attNoClock: 'No clocking on this date.', attOnThisDay: 'on this date', markAsLeave: 'Mark as leave', attOvertime: 'overtime', hoursUnit: 'h',
     attLogged: 'Logged', attRemaining: 'not assigned yet', attOver: 'more than attendance', attMatch: 'matches attendance',
+    allocTitle: 'Split attendance hours', allocTitleNoAtt: 'Split work hours', allocPick: 'Pick project', allocFree: 'not allocated', allocBreakNote: 'fine to leave for a break', allocFill: 'Fill remaining', allocFillInto: 'Fill remaining into entry', allocDragToAdd: 'Drag to add an entry',
     reviewLeaveNotice: 'This date is marked as leave. Sending will replace the leave with these work hours.',
   }
 } as const;
@@ -975,6 +978,8 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
   const [isLeaveMode, setIsLeaveMode] = useState(false);
   const [leaveNote, setLeaveNote] = useState(''); // leave type from attendance, saved as the description
   const addEntryRef = useRef<HTMLButtonElement>(null);
+  const attendanceState = useAttendance(formOpen ? selectedDate : '');
+  const attendanceDay = attendanceState.status === 'ok' ? attendanceState.day : null;
   const [addedEntryId, setAddedEntryId] = useState<string | null>(null);
   const shotDates = useMemo(
     () => [...new Set([...Object.keys(logsByDate).filter(d => days.includes(d)), ...(formOpen ? [selectedDate] : [])])].sort(),
@@ -1098,14 +1103,25 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
               {logsByDate[selectedDate] && <p className="worklog-hint">{t.replaceHint}</p>}
             </div>
 
-            <AttendanceBar t={t} date={selectedDate} isLeaveMode={isLeaveMode}
+            <AttendanceBar t={t} state={attendanceState} isLeaveMode={isLeaveMode}
               loggedHours={dateEntries.reduce((sum, e) => sum + (Number(e.hours) > 0 ? Number(e.hours) : 0), 0)}
               onMarkLeave={type => { setIsLeaveMode(true); setLeaveNote(leaveLabel(type)); }} />
 
             {!isLeaveMode && (
+              <AllocationBar t={t} entries={dateEntries} projects={projects}
+                attendance={clockedHours(attendanceState)} firstIn={attendanceDay?.firstIn} lastOut={attendanceDay?.lastOut} tz={attendanceDay?.tz}
+                onSetHours={patch => setDateEntries(prev => prev.map(e => (patch[e.tempId] !== undefined ? { ...e, hours: patch[e.tempId] } : e)))}
+                onAddEntry={hours => {
+                  const entry = { ...newEntryDraft(), hours: String(hours) };
+                  setDateEntries(prev => [...prev, entry]);
+                  return entry.tempId;
+                }} />
+            )}
+
+            {!isLeaveMode && (
               <div className="worklog-entries">
-                {dateEntries.map(entry => (
-                  <div key={entry.tempId} className="entry-row" data-entry-id={entry.tempId}>
+                {dateEntries.map((entry, entryIndex) => (
+                  <div key={entry.tempId} className="entry-row" data-entry-id={entry.tempId} style={{ '--entry-color': entryColor(entryIndex) } as React.CSSProperties}>
                     {(() => {
                       const ready = isDraftReady(entry, { requireHours: false });
                       const key = ready ? entryKey(entry) : '';
@@ -1252,7 +1268,6 @@ function AdminView({
   showAdminLogs, setShowAdminLogs, showAdminSettings, setShowAdminSettings,
   adminSettings, onSaveSettings, currentProfile,
 }: any) {
-  const [showInsights, setShowInsights] = useState(false);
   const totalHours = workLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
   const exportMonths = getExportMonths();
   const [exportPeriod, setExportPeriod] = useState('all');
@@ -1298,22 +1313,7 @@ function AdminView({
 
   return (
     <div className="admin-view">
-      {/* Stats */}
-      <div className="stats-row">
-        <div className="stat-card">
-          <div className="stat-label">{t.totalProjects}</div>
-          <div className="stat-number">{projects.length}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{t.totalUsers}</div>
-          <div className="stat-number">{visibleEmployeeUsers.length}</div>
-        </div>
-        <button type="button" className={`stat-card stat-toggle${showInsights ? ' open' : ''}`} onClick={() => setShowInsights(v => !v)} aria-expanded={showInsights} aria-label={`${t.totalHours}: ${t.showDetails}`}>
-          <div className="stat-label">{t.totalHours}<ChevronDown size={15} className="stat-chevron" aria-hidden /></div>
-          <div className="stat-number">{Math.round(totalHours * 10) / 10}</div>
-        </button>
-      </div>
-      {showInsights && <HoursInsights t={t} lang={lang} logs={workLogs} />}
+      <HoursHero t={t} lang={lang} logs={workLogs} totalHours={totalHours} projectCount={projects.length} peopleCount={visibleEmployeeUsers.length} />
 
       {/* Records */}
       <div className="admin-section records-section">
