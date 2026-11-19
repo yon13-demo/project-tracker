@@ -923,12 +923,20 @@ tbody tr:hover { background: #fafbff; }
 .stat-toggle .stat-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .stat-chevron { transition: transform .2s; }
 .stat-toggle.open .stat-chevron { transform: rotate(180deg); color: var(--brand); }
-.insights { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); display: grid; gap: 16px; }
+.insights { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .insights-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .insights-sub { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
 .insights-sub span { color: var(--muted); font-size: 12px; }
 .insights-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
 .insights-controls .sort-select { flex: 1 1 260px; min-width: 0; max-width: 100%; }
+.person-pick { position: relative; }
+.person-pick .search-input { flex: 1 1 100%; width: 100%; min-width: 0; max-width: 100%; }
+.person-matches { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; margin-top: 4px; display: grid; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); box-shadow: 0 8px 24px rgba(15,23,42,.12); }
+.person-matches button { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 6px; background: none; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
+.person-matches button:hover, .person-matches button[aria-selected="true"] { background: var(--line2); }
+.pcols-col { flex-basis: 36px; }
+.pcols-stack { display: flex; flex-direction: column-reverse; gap: 2px; width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; overflow: hidden; }
+.pcols-seg { display: block; flex-basis: 0; min-height: 1px; }
 .month-tabs { max-width: 100%; overflow-x: auto; }
 .month-tabs .segmented { flex-wrap: nowrap; }
 .month-tabs .segmented button { white-space: nowrap; }

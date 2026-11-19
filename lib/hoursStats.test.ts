@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { peopleInMonth, splitByPerson, colorSlots, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectKeyOf, projectOptions } from './hoursStats';
+import { peopleInMonth, splitByPerson, colorSlots, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectKeyOf, projectOptions, personOptions, personMonths } from './hoursStats';
 import type { WorkLog } from './worklog';
 
 let n = 0;
@@ -101,5 +101,33 @@ describe('people in a month', () => {
       { userId: 'u2', name: 'Budi', hours: 3 },
     ]);
     expect(splitByPerson(logs, '2026-10', ['p:p2', 'c:quotation'])).toEqual([{ userId: 'u1', name: 'Andi', hours: 7 }]);
+  });
+});
+
+describe('personOptions', () => {
+  it('lists everyone with work hours, by name, with their total', () => {
+    expect(personOptions(logs)).toEqual([
+      { userId: 'u1', name: 'Andi', hours: 20 },
+      { userId: 'u2', name: 'Budi', hours: 10 },
+    ]);
+  });
+});
+
+describe('personMonths', () => {
+  it('gives one entry per recent month, with the person projects busiest first', () => {
+    const m = personMonths(logs, 'u1', 6);
+    expect(m.map(x => [x.month, x.total])).toEqual([['2026-10', 14], ['2026-11', 6]]);
+    expect(m[0].top.map(p => [p.key, p.hours])).toEqual([['p:p1', 6], ['p:p2', 5], ['c:quotation', 2], ['m:survey lokasi', 1]]);
+    expect(m[0].top[0].share).toBeCloseTo(6 / 14);
+  });
+  it('keeps months the person did not work, so columns line up', () => {
+    expect(personMonths(logs, 'u2', 6)).toEqual([
+      { month: '2026-10', total: 3, top: [expect.objectContaining({ key: 'p:p1', hours: 3, share: 1 })] },
+      { month: '2026-11', total: 7, top: [expect.objectContaining({ key: 'p:p1', hours: 7, share: 1 })] },
+    ]);
+    expect(personMonths(logs, 'nobody', 6).every(m => m.total === 0 && m.top.length === 0)).toBe(true);
+  });
+  it('only covers the latest months', () => {
+    expect(personMonths(logs, 'u1', 1).map(m => m.month)).toEqual(['2026-11']);
   });
 });

@@ -1,8 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { matchesQuery } from '@/lib/adminLists';
 import { MonthColumns } from './MonthColumns';
-import { peopleInMonth, splitByPerson, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectOptions, type ProjectHours } from '@/lib/hoursStats';
+import { PersonColumns, personColors } from './PersonColumns';
+import { peopleInMonth, splitByPerson, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectOptions, personOptions, personMonths, type ProjectHours } from '@/lib/hoursStats';
 import type { WorkLog } from '@/lib/worklog';
 
 const TOP = 12;
@@ -48,12 +50,15 @@ function Bar({ label, sub, value, ratio, muted, tape, segments, title, onClick }
 // Admin panel under "Total jam kerja": hours per project for a month, and who worked on a project.
 export function HoursInsights({ t, lang, logs }: { t: any; lang: 'id' | 'en'; logs: WorkLog[] }) {
   const months = useMemo(() => monthTotals(logs), [logs]);
-  const [tab, setTab] = useState<'month' | 'project'>('month');
+  const [tab, setTab] = useState<'month' | 'project' | 'person'>('month');
   const [month, setMonth] = useState(() => months[months.length - 1]?.month ?? new Date().toISOString().slice(0, 7));
   const [showAll, setShowAll] = useState(false);
   const options = useMemo(() => projectOptions(logs), [logs]);
   const [projectKey, setProjectKey] = useState('');
   const [scope, setScope] = useState<'month' | 'all'>('month');
+  const people_ = useMemo(() => personOptions(logs), [logs]);
+  const [personId, setPersonId] = useState('');
+  const [personQuery, setPersonQuery] = useState('');
 
   const rows = useMemo(() => projectHoursForMonth(logs, month), [logs, month]);
   const monthTotal = rows.reduce((s, r) => s + r.hours, 0);
@@ -89,6 +94,14 @@ ${rest.map(p => `${p.name} ${fmt(p.hours)} ${t.hoursUnit}`).join(', ')}` });
   const peopleTotal = people.reduce((s, p) => s + p.hours, 0);
   const maxPerson = Math.max(...people.map(p => p.hours), 1);
 
+  const selectedPerson = people_.find(p => p.userId === personId) ?? [...people_].sort((a, b) => b.hours - a.hours)[0];
+  const personData = useMemo(() => (selectedPerson ? personMonths(logs, selectedPerson.userId, 6) : []), [logs, selectedPerson]);
+  const personColor = personColors(personData);
+  const personMonth = personData.find(m => m.month === month) ?? personData[personData.length - 1];
+  const personMax = Math.max(...(personMonth?.top.map(p => p.hours) ?? []), 1);
+  const matches = personQuery.trim() ? people_.filter(p => matchesQuery([p.name], personQuery)).slice(0, 8) : [];
+  const openPerson = (userId: string) => { setPersonId(userId); setPersonQuery(''); setTab('person'); };
+
   const openProject = (r: ProjectHours) => { setProjectKey(r.key); setScope('month'); setTab('project'); };
   const projectLabel = (r: { code: string; name: string; manual?: boolean }) => (
     <>{r.code && <span className="code-badge">{r.code}</span>}<span className="hbar-name">{r.name}</span>{r.manual && <span className="hours-badge warn manual-tag">{t.manual}</span>}</>
@@ -99,7 +112,7 @@ ${rest.map(p => `${p.name} ${fmt(p.hours)} ${t.hoursUnit}`).join(', ')}` });
   return (
     <div className="insights">
       <div className="insights-head">
-        <Segmented value={tab} onChange={setTab} options={[{ value: 'month', label: t.perMonth }, { value: 'project', label: t.perProject }]} />
+        <Segmented value={tab} onChange={setTab} options={[{ value: 'month', label: t.perMonth }, { value: 'project', label: t.perProject }, { value: 'person', label: t.perPerson }]} />
       <div className="month-tabs">
         <Segmented value={month} onChange={m => { setMonth(m); setShowAll(false); }}
           options={months.map(m => ({ value: m.month, label: monthLabel(m.month, lang) }))} />
@@ -142,7 +155,7 @@ ${rest.map(p => `${p.name} ${fmt(p.hours)} ${t.hoursUnit}`).join(', ')}` });
             ))}
           </div>
         </section>
-      ) : (
+      ) : tab === 'project' ? (
         <section>
           <div className="insights-controls">
             <select className="sort-select" value={selectedKey} onChange={e => setProjectKey(e.target.value)} aria-label={t.pickProject}>
@@ -158,9 +171,47 @@ ${rest.map(p => `${p.name} ${fmt(p.hours)} ${t.hoursUnit}`).join(', ')}` });
           <div className="hbars">
             {people.map(p => (
               <Bar key={p.userId} label={<span className="hbar-name">{p.name}</span>} value={`${fmt(p.hours)} ${t.hoursUnit}`} sub={`${p.days} ${t.daysUnit}`}
-                ratio={p.hours / maxPerson} title={`${p.name}: ${fmt(p.hours)} ${t.hoursUnit}, ${p.days} ${t.daysUnit}`} />
+                ratio={p.hours / maxPerson} title={`${p.name}: ${fmt(p.hours)} ${t.hoursUnit}, ${p.days} ${t.daysUnit}`} onClick={() => openPerson(p.userId)} />
             ))}
           </div>
+        </section>
+      ) : (
+        <section>
+          <div className="insights-controls person-pick">
+            <input className="search-input" type="search" value={personQuery} onChange={e => setPersonQuery(e.target.value)}
+              placeholder={t.searchPersonName} aria-label={t.searchPersonName} />
+            {matches.length > 0 && (
+              <div className="person-matches" role="listbox">
+                {matches.map(p => (
+                  <button key={p.userId} type="button" role="option" aria-selected={p.userId === selectedPerson?.userId} onClick={() => openPerson(p.userId)}>
+                    <span>{p.name}</span><span className="hbar-sub">{fmt(p.hours)} {t.hoursUnit}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {personQuery.trim() && !matches.length && <div className="records-empty">{t.noData}</div>}
+          </div>
+          {selectedPerson && (
+            <>
+              <div className="insights-sub">
+                <strong>{selectedPerson.name}</strong>
+                <span>{t.hoursPerMonth}</span>
+              </div>
+              <PersonColumns t={t} data={personData} selected={personMonth?.month ?? month} label={m => monthLabel(m, lang)} onSelect={m => setMonth(m)} />
+              <div className="insights-sub insights-gap">
+                <strong>{personMonth && monthLabel(personMonth.month, lang, true)}</strong>
+                <span>{fmt(personMonth?.total ?? 0)} {t.hoursUnit}</span>
+              </div>
+              {!personMonth?.top.length && <div className="records-empty">{t.noHoursThisMonth}</div>}
+              <div className="hbars">
+                {personMonth?.top.map(r => (
+                  <Bar key={r.key} tape label={projectLabel(r)} value={pct(r.share)} sub={`${fmt(r.hours)} ${t.hoursUnit}`} ratio={r.hours / personMax}
+                    segments={[{ key: r.key, ratio: r.hours / personMax, color: personColor(r.key), title: `${r.name}: ${fmt(r.hours)} ${t.hoursUnit}` }]}
+                    title={`${r.code ? r.code + ' · ' : ''}${r.name}: ${pct(r.share)} (${fmt(r.hours)} ${t.hoursUnit})`} onClick={() => openProject(r)} />
+                ))}
+              </div>
+            </>
+          )}
         </section>
       )}
     </div>
