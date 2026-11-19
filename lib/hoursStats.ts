@@ -109,3 +109,19 @@ export function splitByPerson(logs: WorkLog[], month: string, keys: string[]): P
   const wanted = new Set(keys);
   return sumByPerson(logs, l => l.log_date.startsWith(month) && wanted.has(projectKeyOf(l)));
 }
+
+export type PersonOption = { userId: string; name: string; hours: number };
+
+// Everyone with work hours, by name (for the person picker).
+export const personOptions = (logs: WorkLog[]): PersonOption[] =>
+  sumByPerson(logs, () => true).sort((a, b) => a.name.localeCompare(b.name));
+
+// One person's latest months (the same months as the other charts, so columns line up),
+// each with that person's projects, busiest first; share is of the person's month.
+export function personMonths(logs: WorkLog[], userId: string, lastMonths = 6): MonthTop[] {
+  const mine = logs.filter(l => l.user_id === userId);
+  return monthTotals(logs).slice(-lastMonths).map(({ month }) => {
+    const top = projectHoursForMonth(mine, month).sort((a, b) => b.hours - a.hours);
+    return { month, total: top.reduce((s, p) => s + p.hours, 0), top };
+  });
+}
