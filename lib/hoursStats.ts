@@ -68,25 +68,6 @@ export function projectOptions(logs: WorkLog[]): ProjectOption[] {
   return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export type MonthTop = { month: string; total: number; top: ProjectHours[] };
-
-// The n busiest projects (Quotation/Training excluded) of each of the latest `lastMonths` months, oldest first.
-export function topProjectsByMonth(logs: WorkLog[], n: number, lastMonths = 6): MonthTop[] {
-  return monthTotals(logs).slice(-lastMonths).map(({ month, hours }) => ({
-    month, total: hours,
-    top: projectHoursForMonth(logs, month).filter(r => r.category === 'project').slice(0, n),
-  }));
-}
-
-// Colour follows the project, not its rank: the projects on screen get slots in order of
-// their summed hours, so a project keeps one colour in every month. Past `slots`, none.
-export function colorSlots(months: MonthTop[], slots: number): Map<string, number> {
-  const sum = new Map<string, number>();
-  for (const m of months) for (const p of m.top) sum.set(p.key, (sum.get(p.key) ?? 0) + p.hours);
-  const order = [...sum].sort((a, b) => b[1] - a[1]).slice(0, slots).map(([k]) => k);
-  return new Map(order.map((k, i) => [k, i]));
-}
-
 export type PersonShare = { userId: string; name: string; hours: number };
 
 function sumByPerson(logs: WorkLog[], keep: (l: WorkLog) => boolean): PersonShare[] {
@@ -98,16 +79,6 @@ function sumByPerson(logs: WorkLog[], keep: (l: WorkLog) => boolean): PersonShar
     m.set(l.user_id, p);
   }
   return [...m.values()].sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name));
-}
-
-// Everyone's hours in a month, busiest first (decides who gets a colour).
-export const peopleInMonth = (logs: WorkLog[], month: string) =>
-  sumByPerson(logs, l => l.log_date.startsWith(month));
-
-// Who made up the hours of one or more projects (rows) in a month.
-export function splitByPerson(logs: WorkLog[], month: string, keys: string[]): PersonShare[] {
-  const wanted = new Set(keys);
-  return sumByPerson(logs, l => l.log_date.startsWith(month) && wanted.has(projectKeyOf(l)));
 }
 
 export type PersonOption = { userId: string; name: string; hours: number };
@@ -137,26 +108,9 @@ export function roundPercents(values: number[]): number[] {
   return out;
 }
 
-export type StripPiece = { key: string; hours: number; pct: number; items: ProjectHours[] };
-
-// The month as one strip: pieces of at least `min` of the total, the rest merged into one 'rest' piece.
-export function composition(items: ProjectHours[], min = 0.05): StripPiece[] {
-  const sorted = [...items].sort((a, b) => b.hours - a.hours);
-  const total = sorted.reduce((s, i) => s + i.hours, 0) || 1;
-  const big = sorted.filter(i => i.hours / total >= min);
-  const small = sorted.filter(i => i.hours / total < min);
-  const pieces = big.map(i => ({ key: i.key, hours: i.hours, pct: 0, items: [i] }));
-  if (small.length) pieces.push({ key: 'rest', hours: small.reduce((s, i) => s + i.hours, 0), pct: 0, items: small });
-  const pcts = roundPercents(pieces.map(p => p.hours));
-  return pieces.map((p, i) => ({ ...p, pct: pcts[i] }));
-}
-
-// One person's hours in each of `months`, with that person's projects, busiest first;
-// share is of the person's month.
-export function personMonths(logs: WorkLog[], userId: string, months: string[]): MonthTop[] {
-  const mine = logs.filter(l => l.user_id === userId);
-  return months.map(month => {
-    const top = projectHoursForMonth(mine, month).sort((a, b) => b.hours - a.hours);
-    return { month, total: top.reduce((s, p) => s + p.hours, 0), top };
-  });
-}
+// Timeline series: by project (Quotation/Training are non-project), or by person.
+export const projectSeries = (l: WorkLog) => {
+  const d = describe(l);
+  return { key: projectKeyOf(l), label: d.name, ...(d.code ? { code: d.code } : {}), non: d.category !== 'project' };
+};
+export const personSeries = (l: WorkLog) => ({ key: l.user_id, label: l.profiles?.full_name || '—' });
