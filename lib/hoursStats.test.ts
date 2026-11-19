@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { peopleInMonth, splitByPerson, colorSlots, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectKeyOf, projectOptions, personOptions, personMonths } from './hoursStats';
+import { peopleInMonth, splitByPerson, colorSlots, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectKeyOf, projectOptions, personOptions, personMonths, monthRange, roundPercents, composition } from './hoursStats';
 import type { WorkLog } from './worklog';
 
 let n = 0;
@@ -113,21 +113,42 @@ describe('personOptions', () => {
   });
 });
 
+describe('monthRange', () => {
+  it('is a continuous run of months ending at the given month, never skipping one', () => {
+    expect(monthRange('2026-02', 4)).toEqual(['2025-11', '2025-12', '2026-01', '2026-02']);
+  });
+});
+
+describe('roundPercents', () => {
+  it('rounds to whole percents that add up to exactly 100', () => {
+    expect(roundPercents([1, 1, 1])).toEqual([34, 33, 33]);
+    expect(roundPercents([114.5, 2, 2, 1.5, 3])).toEqual([93, 2, 2, 1, 2]);
+    expect(roundPercents([0, 0])).toEqual([0, 0]);
+  });
+});
+
+describe('composition', () => {
+  const item = (key: string, hours: number) => ({ key, code: '', name: key, category: 'project' as const, manual: false, hours, share: 0 });
+  it('keeps pieces of at least 5% and merges the rest into one Lainnya piece', () => {
+    const c = composition([item('a', 114.5), item('b', 2), item('c', 2), item('d', 1.5), item('e', 3)]);
+    expect(c.map(s => [s.key, s.hours])).toEqual([['a', 114.5], ['rest', 8.5]]);
+    expect(c[1].items.map(i => i.key)).toEqual(['e', 'b', 'c', 'd']);
+    expect(c.map(s => s.pct)).toEqual([93, 7]);
+  });
+  it('has no Lainnya piece when nothing is small', () => {
+    expect(composition([item('a', 6), item('b', 4)]).map(s => s.key)).toEqual(['a', 'b']);
+  });
+});
+
 describe('personMonths', () => {
-  it('gives one entry per recent month, with the person projects busiest first', () => {
-    const m = personMonths(logs, 'u1', 6);
-    expect(m.map(x => [x.month, x.total])).toEqual([['2026-10', 14], ['2026-11', 6]]);
-    expect(m[0].top.map(p => [p.key, p.hours])).toEqual([['p:p1', 6], ['p:p2', 5], ['c:quotation', 2], ['m:survey lokasi', 1]]);
-    expect(m[0].top[0].share).toBeCloseTo(6 / 14);
+  const months = ['2026-09', '2026-10', '2026-11'];
+  it('gives every month asked for, with the person projects busiest first', () => {
+    const m = personMonths(logs, 'u1', months);
+    expect(m.map(x => [x.month, x.total])).toEqual([['2026-09', 0], ['2026-10', 14], ['2026-11', 6]]);
+    expect(m[1].top.map(p => [p.key, p.hours])).toEqual([['p:p1', 6], ['p:p2', 5], ['c:quotation', 2], ['m:survey lokasi', 1]]);
+    expect(m[1].top[0].share).toBeCloseTo(6 / 14);
   });
-  it('keeps months the person did not work, so columns line up', () => {
-    expect(personMonths(logs, 'u2', 6)).toEqual([
-      { month: '2026-10', total: 3, top: [expect.objectContaining({ key: 'p:p1', hours: 3, share: 1 })] },
-      { month: '2026-11', total: 7, top: [expect.objectContaining({ key: 'p:p1', hours: 7, share: 1 })] },
-    ]);
-    expect(personMonths(logs, 'nobody', 6).every(m => m.total === 0 && m.top.length === 0)).toBe(true);
-  });
-  it('only covers the latest months', () => {
-    expect(personMonths(logs, 'u1', 1).map(m => m.month)).toEqual(['2026-11']);
+  it('is empty for someone without hours', () => {
+    expect(personMonths(logs, 'nobody', months).every(m => m.total === 0 && m.top.length === 0)).toBe(true);
   });
 });
