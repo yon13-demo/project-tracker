@@ -116,11 +116,46 @@ export type PersonOption = { userId: string; name: string; hours: number };
 export const personOptions = (logs: WorkLog[]): PersonOption[] =>
   sumByPerson(logs, () => true).sort((a, b) => a.name.localeCompare(b.name));
 
-// One person's latest months (the same months as the other charts, so columns line up),
-// each with that person's projects, busiest first; share is of the person's month.
-export function personMonths(logs: WorkLog[], userId: string, lastMonths = 6): MonthTop[] {
+// `n` consecutive months ending at `last` ("YYYY-MM"), oldest first. Months without hours still count.
+export function monthRange(last: string, n: number): string[] {
+  const [y, m] = last.split('-').map(Number);
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(Date.UTC(y, m - 1 - (n - 1 - i), 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  });
+}
+
+// Whole percents that add up to exactly 100 (largest remainder).
+export function roundPercents(values: number[]): number[] {
+  const total = values.reduce((s, v) => s + v, 0);
+  if (!total) return values.map(() => 0);
+  const raw = values.map(v => (v / total) * 100);
+  const out = raw.map(Math.floor);
+  let left = 100 - out.reduce((s, v) => s + v, 0);
+  const order = raw.map((r, i) => [r - Math.floor(r), i] as const).sort((a, b) => b[0] - a[0]);
+  for (const [, i] of order) { if (left-- <= 0) break; out[i]++; }
+  return out;
+}
+
+export type StripPiece = { key: string; hours: number; pct: number; items: ProjectHours[] };
+
+// The month as one strip: pieces of at least `min` of the total, the rest merged into one 'rest' piece.
+export function composition(items: ProjectHours[], min = 0.05): StripPiece[] {
+  const sorted = [...items].sort((a, b) => b.hours - a.hours);
+  const total = sorted.reduce((s, i) => s + i.hours, 0) || 1;
+  const big = sorted.filter(i => i.hours / total >= min);
+  const small = sorted.filter(i => i.hours / total < min);
+  const pieces = big.map(i => ({ key: i.key, hours: i.hours, pct: 0, items: [i] }));
+  if (small.length) pieces.push({ key: 'rest', hours: small.reduce((s, i) => s + i.hours, 0), pct: 0, items: small });
+  const pcts = roundPercents(pieces.map(p => p.hours));
+  return pieces.map((p, i) => ({ ...p, pct: pcts[i] }));
+}
+
+// One person's hours in each of `months`, with that person's projects, busiest first;
+// share is of the person's month.
+export function personMonths(logs: WorkLog[], userId: string, months: string[]): MonthTop[] {
   const mine = logs.filter(l => l.user_id === userId);
-  return monthTotals(logs).slice(-lastMonths).map(({ month }) => {
+  return months.map(month => {
     const top = projectHoursForMonth(mine, month).sort((a, b) => b.hours - a.hours);
     return { month, total: top.reduce((s, p) => s + p.hours, 0), top };
   });

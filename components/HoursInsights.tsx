@@ -3,8 +3,8 @@
 import { useMemo, useState } from 'react';
 import { matchesQuery } from '@/lib/adminLists';
 import { MonthColumns } from './MonthColumns';
-import { PersonColumns, personColors } from './PersonColumns';
-import { peopleInMonth, splitByPerson, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectOptions, personOptions, personMonths, type ProjectHours } from '@/lib/hoursStats';
+import { PersonHours, monthLabel } from './PersonHours';
+import { peopleInMonth, splitByPerson, topProjectsByMonth, monthTotals, personHoursForProject, projectHoursForMonth, projectOptions, personOptions, type ProjectHours } from '@/lib/hoursStats';
 import type { WorkLog } from '@/lib/worklog';
 
 const TOP = 12;
@@ -12,9 +12,6 @@ const PEOPLE_COLOURS = 7;
 const fmt = (n: number) => String(Math.round(n * 10) / 10);
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
-function monthLabel(month: string, lang: 'id' | 'en', long = false) {
-  return new Date(`${month}-01T00:00:00`).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-GB', { month: long ? 'long' : 'short', year: 'numeric' });
-}
 
 function Segmented<V extends string>({ value, options, onChange }: { value: V; options: { value: V; label: string }[]; onChange: (v: V) => void }) {
   return (
@@ -95,10 +92,6 @@ ${rest.map(p => `${p.name} ${fmt(p.hours)} ${t.hoursUnit}`).join(', ')}` });
   const maxPerson = Math.max(...people.map(p => p.hours), 1);
 
   const selectedPerson = people_.find(p => p.userId === personId) ?? [...people_].sort((a, b) => b.hours - a.hours)[0];
-  const personData = useMemo(() => (selectedPerson ? personMonths(logs, selectedPerson.userId, 6) : []), [logs, selectedPerson]);
-  const personColor = personColors(personData);
-  const personMonth = personData.find(m => m.month === month) ?? personData[personData.length - 1];
-  const personMax = Math.max(...(personMonth?.top.map(p => p.hours) ?? []), 1);
   const matches = personQuery.trim() ? people_.filter(p => matchesQuery([p.name], personQuery)).slice(0, 8) : [];
   const openPerson = (userId: string) => { setPersonId(userId); setPersonQuery(''); setTab('person'); };
 
@@ -113,10 +106,10 @@ ${rest.map(p => `${p.name} ${fmt(p.hours)} ${t.hoursUnit}`).join(', ')}` });
     <div className="insights">
       <div className="insights-head">
         <Segmented value={tab} onChange={setTab} options={[{ value: 'month', label: t.perMonth }, { value: 'project', label: t.perProject }, { value: 'person', label: t.perPerson }]} />
-      <div className="month-tabs">
+      {tab !== 'person' && <div className="month-tabs">
         <Segmented value={month} onChange={m => { setMonth(m); setShowAll(false); }}
           options={months.map(m => ({ value: m.month, label: monthLabel(m.month, lang) }))} />
-      </div>
+      </div>}
       </div>
 
       {tab === 'month' ? (
@@ -193,23 +186,9 @@ ${rest.map(p => `${p.name} ${fmt(p.hours)} ${t.hoursUnit}`).join(', ')}` });
           </div>
           {selectedPerson && (
             <>
-              <div className="insights-sub">
-                <strong>{selectedPerson.name}</strong>
-                <span>{t.hoursPerMonth}</span>
-              </div>
-              <PersonColumns t={t} data={personData} selected={personMonth?.month ?? month} label={m => monthLabel(m, lang)} onSelect={m => setMonth(m)} />
-              <div className="insights-sub insights-gap">
-                <strong>{personMonth && monthLabel(personMonth.month, lang, true)}</strong>
-                <span>{fmt(personMonth?.total ?? 0)} {t.hoursUnit}</span>
-              </div>
-              {!personMonth?.top.length && <div className="records-empty">{t.noHoursThisMonth}</div>}
-              <div className="hbars">
-                {personMonth?.top.map(r => (
-                  <Bar key={r.key} tape label={projectLabel(r)} value={pct(r.share)} sub={`${fmt(r.hours)} ${t.hoursUnit}`} ratio={r.hours / personMax}
-                    segments={[{ key: r.key, ratio: r.hours / personMax, color: personColor(r.key), title: `${r.name}: ${fmt(r.hours)} ${t.hoursUnit}` }]}
-                    title={`${r.code ? r.code + ' · ' : ''}${r.name}: ${pct(r.share)} (${fmt(r.hours)} ${t.hoursUnit})`} onClick={() => openProject(r)} />
-                ))}
-              </div>
+              <div className="insights-sub"><strong>{selectedPerson.name}</strong></div>
+              <PersonHours t={t} lang={lang} logs={logs} userId={selectedPerson.userId} name={selectedPerson.name}
+                month={month} onMonth={setMonth} onOpenProject={openProject} />
             </>
           )}
         </section>
