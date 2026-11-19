@@ -74,7 +74,8 @@ export function HoursInsights({ t, lang, logs }: { t: any; lang: 'id' | 'en'; lo
     const split = splitByPerson(logs, month, keys);
     const rowHours = split.reduce((s, p) => s + p.hours, 0) || 1;
     const share = (h: number) => `${fmt(h)} ${t.hoursUnit} · ${pct(h / rowHours)} ${t.ofThisRow} · ${pct(h / (monthTotal || 1))} ${t.ofThisMonth}`;
-    const named = split.filter(p => personSlot.has(p.userId)).sort((a, b) => personSlot.get(a.userId)! - personSlot.get(b.userId)!);
+    // Widest piece first, so each bar narrows left to right; the grey rest stays last.
+    const named = split.filter(p => personSlot.has(p.userId));
     const rest = split.filter(p => !personSlot.has(p.userId));
     const restHours = rest.reduce((s, p) => s + p.hours, 0);
     const out = named.map(p => ({ key: p.userId, ratio: p.hours / scale, color: `var(--series-${personSlot.get(p.userId)! + 1})`, title: `${p.name}: ${share(p.hours)}` }));
