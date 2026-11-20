@@ -13,6 +13,9 @@ export function attendanceConfigured() {
 function attendanceClient() {
   client ??= createClient(process.env.ATTENDANCE_SUPABASE_URL!, process.env.ATTENDANCE_SUPABASE_ANON_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // Next.js caches server fetches (supabase-js RPCs are POSTs) in its data cache, which on Vercel
+    // outlives requests and deploys: a late clock-out then never showed up. Always ask fresh.
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
   });
   return client;
 }
