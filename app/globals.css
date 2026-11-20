@@ -221,6 +221,9 @@ p { margin: 0; color: var(--muted); }
 }
 .worklog-form-header { display: flex; justify-content: space-between; align-items: center; }
 .worklog-hint { font-size: 12px; color: var(--warn); }
+.prevday-chip { justify-self: start; padding: 5px 12px; border: 1px dashed var(--warn); border-radius: 999px; background: var(--warn-soft);
+  color: var(--warn); font-size: 12px; font-weight: 600; cursor: pointer; }
+.prevday-chip:hover { border-style: solid; }
 .worklog-entries { display: grid; gap: 12px; margin: 14px 0; }
 .worklog-entries .entry-row { position: relative; background: var(--card); }
 .worklog-entries .btn-remove-entry { position: absolute; top: 8px; right: 8px; }

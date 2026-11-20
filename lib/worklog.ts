@@ -154,3 +154,10 @@ export function groupLogsByProject(logs: WorkLog[]): ProjectGroup[] {
   for (const g of list) g.days.sort((a, b) => b.date.localeCompare(a.date));
   return list.sort((a, b) => b.days[0].date.localeCompare(a.days[0].date));
 }
+
+// The last working day before `today` (YYYY-MM-DD): yesterday, or Friday when today is Sat–Mon.
+export function previousWorkday(today: string): string {
+  const d = new Date(`${today}T00:00:00Z`);
+  do d.setUTCDate(d.getUTCDate() - 1); while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return d.toISOString().slice(0, 10);
+}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { clockTime, formatHours, hoursGap, leaveLabel, type AttendanceDay, type LeaveType } from '@/lib/attendance';
+import { clockTime, formatHours, hoursGap, isClockOpen, leaveLabel, type AttendanceDay, type LeaveType } from '@/lib/attendance';
 
 export type AttendanceState = { status: 'loading' } | { status: 'error' } | { status: 'ok'; day: AttendanceDay };
 
@@ -29,9 +29,9 @@ export function useAttendance(date: string): AttendanceState {
   return state;
 }
 
-// Attendance hours worth splitting: a matched, clocked day that is not leave.
+// Attendance hours worth splitting: a matched, fully clocked (in and out) day that is not leave.
 export function clockedHours(state: AttendanceState): number | null {
-  return state.status === 'ok' && state.day.matched && !state.day.leave ? state.day.hours : null;
+  return state.status === 'ok' && state.day.matched && !state.day.leave && !isClockOpen(state.day) ? state.day.hours : null;
 }
 
 // What the attendance system says about the selected date, next to what is logged in Weave.
@@ -55,6 +55,16 @@ export function AttendanceBar({ t, state, loggedHours, isLeaveMode, onMarkLeave 
   }
 
   if (day.hours == null) return <div className="attendance-bar muted"><Clock size={14} /> {t.attNoClock}</div>;
+
+  // Clocked in, never out: no final hours yet, so nothing to compare against.
+  if (isClockOpen(day)) {
+    return (
+      <div className="attendance-bar muted">
+        <Clock size={14} />
+        <span><strong>{t.attendance}:</strong> {t.attClockIn} {clockTime(day.firstIn, day.tz)} · {t.attNoClockOut}</span>
+      </div>
+    );
+  }
 
   const gap = isLeaveMode ? null : hoursGap(day.hours, loggedHours);
   const tone = gap == null ? '' : gap > 0 ? 'warn' : gap < 0 ? 'over' : 'ok';
