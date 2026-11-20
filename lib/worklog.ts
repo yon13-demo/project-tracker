@@ -163,3 +163,32 @@ export function previousWorkday(today: string): string {
   do d.setUTCDate(d.getUTCDate() - 1); while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
   return d.toISOString().slice(0, 10);
 }
+
+// A project someone logged recently: a registered one (project_id) or a manual one (project_id '').
+export type RecentProject = { project_id: string; name: string; code: string };
+
+// The user's projects by the latest day they were logged, newest first, each once.
+// Registered projects must still be on `projects` (the pickable list); manual ones merge by name.
+export function recentProjects(logs: WorkLog[], projects: Project[], limit = 5): RecentProject[] {
+  const byId = new Map(projects.map(p => [p.id, p]));
+  const seen = new Set<string>();
+  const out: RecentProject[] = [];
+  const sorted = logs.filter(l => !l.is_leave && (l.category || 'project') === 'project')
+    .sort((a, b) => b.log_date.localeCompare(a.log_date));
+  for (const l of sorted) {
+    if (out.length >= limit) break;
+    if (l.project_id) {
+      const p = byId.get(l.project_id);
+      if (!p || seen.has(p.id)) continue;
+      seen.add(p.id);
+      out.push({ project_id: p.id, name: p.name, code: p.project_code });
+    } else {
+      const name = (l.custom_project_name || '').trim();
+      const key = `m:${name.toLowerCase()}`;
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ project_id: '', name, code: (l.custom_project_code || '').trim() });
+    }
+  }
+  return out;
+}

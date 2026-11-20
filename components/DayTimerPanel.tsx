@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronUp, ExternalLink } from 'lucide-react';
 import { useDayTimer } from './useDayTimer';
@@ -8,12 +8,13 @@ import { usePipWindow } from './usePipWindow';
 import { TimerBody } from './TimerBody';
 import { MiniPlayer } from './MiniPlayer';
 import { DayReview } from './DayReview';
-import { isLeaveDate, workLogToExistingEntry, type Project, type WorkLog } from '@/lib/worklog';
+import { isLeaveDate, recentProjects, workLogToExistingEntry, type Project, type WorkLog } from '@/lib/worklog';
 
 export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs, logsLoaded, onSent }: {
   t: any; lang: 'id' | 'en'; userId: string; projects: Project[]; hasV4Schema: boolean; workLogs: WorkLog[]; logsLoaded: boolean; onSent: (date: string, rows: WorkLog[]) => void;
 }) {
   const timer = useDayTimer(userId);
+  const recent = useMemo(() => recentProjects(workLogs, projects), [workLogs, projects]);
   const pip = usePipWindow();
   const [miniExpanded, setMiniExpanded] = useState(false);
   const { state } = timer;
@@ -55,7 +56,7 @@ export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs
         <span className="timer-total">{state.date}</span>
       </div>
       {timer.staleNotice && <p className="timer-stale">{t.timerStaleDay.replace('{date}', timer.staleNotice)}</p>}
-      <TimerBody t={t} timer={timer} projects={projects} hasV4Schema={hasV4Schema} />
+      <TimerBody t={t} timer={timer} projects={projects} recent={recent} hasV4Schema={hasV4Schema} />
       <div className="timer-actions timer-footer">
         {pip.supported && !pip.pipWindow && (
           <button className="btn-secondary" onClick={() => { setMiniExpanded(false); void pip.open(); }}><ExternalLink size={14} />{t.popOut}</button>
@@ -67,7 +68,7 @@ export function DayTimerPanel({ t, lang, userId, projects, hasV4Schema, workLogs
         miniExpanded ? (
           <div className="timer-panel">
             <button className="btn-ghost-icon mini-collapse" onClick={() => setMini(false)} title={t.collapse}><ChevronUp size={18} /></button>
-            <TimerBody t={t} timer={timer} projects={projects} hasV4Schema={hasV4Schema} compact />
+            <TimerBody t={t} timer={timer} projects={projects} recent={recent} hasV4Schema={hasV4Schema} compact />
           </div>
         ) : (
           <MiniPlayer t={t} timer={timer} onExpand={() => setMini(true)} />

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { Clock } from 'lucide-react';
-import { CATEGORY_LABEL, WORK_CATEGORIES, type EntryDraft, type Project, type WorkCategory } from '@/lib/worklog';
+import { CATEGORY_LABEL, WORK_CATEGORIES, type EntryDraft, type Project, type RecentProject, type WorkCategory } from '@/lib/worklog';
 import { ProjectCombobox } from './ProjectCombobox';
 import { imagesFrom } from './ScreenshotStrip';
 
@@ -14,8 +14,8 @@ function autoGrow(el: HTMLTextAreaElement | null) {
   el.style.height = `${el.scrollHeight + 2}px`;
 }
 
-export function EntryFields({ t, entry, projects, hasV4Schema, showHours = true, onChange, onPasteFiles, extra }: {
-  t: any; entry: EntryDraft; projects: Project[]; hasV4Schema: boolean; showHours?: boolean;
+export function EntryFields({ t, entry, projects, recent, hasV4Schema, showHours = true, onChange, onPasteFiles, extra }: {
+  t: any; entry: EntryDraft; projects: Project[]; recent?: RecentProject[]; hasV4Schema: boolean; showHours?: boolean;
   onChange: (patch: Partial<EntryDraft>) => void;
   onPasteFiles?: (files: File[]) => void; // e.g. Win+Shift+S then Ctrl+V anywhere in the row
   extra?: ReactNode;
@@ -37,7 +37,7 @@ export function EntryFields({ t, entry, projects, hasV4Schema, showHours = true,
       {entry.category === 'project' && (
         <div className="entry-field">
           <label>{t.namaProyek} / {t.nomorProyek}</label>
-          <ProjectCombobox t={t} entry={entry} projects={projects} allowManual={hasV4Schema} onChange={onChange} />
+          <ProjectCombobox t={t} entry={entry} projects={projects} recent={recent} allowManual={hasV4Schema} onChange={onChange} />
         </div>
       )}
       {entry.category === 'project' && !entry.project_id && entry.custom_name && (
