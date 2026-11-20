@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { codeMatches } from '@/lib/manualMerge';
 import type { EntryDraft, Project, RecentProject } from '@/lib/worklog';
 
 const CHIPS = 4;
 
-type Option = { key: string; name: string; code: string; recent: boolean; selected: boolean; pick: () => void };
+type Option = { key: string; name: string; code: string; recent: boolean; byCode?: boolean; selected: boolean; pick: () => void };
 
 // Searchable project picker; when nothing matches, the typed text can be used as a manual project.
 // The user's recently logged projects come first in the list and as one-tap chips under the input.
@@ -45,16 +46,28 @@ export function ProjectCombobox({ t, entry, projects, recent = [], allowManual, 
     key: `p:${p.id}`, name: p.name, code: p.project_code, recent: false, selected: p.id === entry.project_id, pick: () => pickProject(p),
   });
   const hit = (name: string, code: string) => `${name} ${code}`.toLowerCase().includes(q);
+  // "2260301_LOreal Canada…" names a registered project by its number even when the rest differs:
+  // offer that project first so it is picked instead of a new manual one.
+  const byCode = searching ? codeMatches(entry.query, projects) : [];
+  const byCodeIds = new Set(byCode.map(p => p.id));
   const options: Option[] = [
-    ...recent.filter(r => !searching || hit(r.name, r.code)).map(fromRecent),
-    ...projects.filter(p => !recentIds.has(p.id) && (!searching || hit(p.name, p.project_code))).map(fromProject),
+    ...byCode.map(p => ({ ...fromProject(p), byCode: true })),
+    ...recent.filter(r => !byCodeIds.has(r.project_id) && (!searching || hit(r.name, r.code))).map(fromRecent),
+    ...projects.filter(p => !recentIds.has(p.id) && !byCodeIds.has(p.id) && (!searching || hit(p.name, p.project_code))).map(fromProject),
   ];
   const exact = projects.some(p => p.name.toLowerCase() === q || p.project_code.toLowerCase() === q)
     || recent.some(r => r.name.toLowerCase() === q);
   const showManual = allowManual && searching && !exact;
   const optionCount = options.length + (showManual ? 1 : 0);
+  const codeCount = byCode.length;
   const recentCount = options.filter(o => o.recent).length;
-  const grouped = recentCount > 0 && recentCount < options.length;
+  const grouped = codeCount > 0 || (recentCount > 0 && recentCount < options.length);
+  const groupAt: Record<number, { label: string; match?: boolean }> = {};
+  if (grouped) {
+    if (codeCount) groupAt[0] = { label: t.matchByCode, match: true };
+    if (recentCount) groupAt[codeCount] = { label: t.recentProjects };
+    if (options.length > codeCount + recentCount) groupAt[codeCount + recentCount] = { label: t.allProjects };
+  }
 
   function choose(index: number) {
     if (index < options.length) options[index].pick();
@@ -94,8 +107,7 @@ export function ProjectCombobox({ t, entry, projects, recent = [], allowManual, 
         <ul className="combobox-list" role="listbox">
           {options.map((o, i) => (
             <li key={o.key} role="presentation" className="combobox-item">
-              {grouped && i === 0 && <div className="combobox-group">{t.recentProjects}</div>}
-              {grouped && i === recentCount && <div className="combobox-group">{t.allProjects}</div>}
+              {groupAt[i] && <div className={`combobox-group${groupAt[i].match ? ' match' : ''}`}>{groupAt[i].label}</div>}
               <div role="option" aria-selected={o.selected}
                 className={`combobox-option${i === active ? ' active' : ''}`}
                 onMouseDown={e => { e.preventDefault(); o.pick(); }}

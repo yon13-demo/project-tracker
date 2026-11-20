@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Pencil, Plus, ToggleLeft, ToggleRight, Trash2, UserPlus } from 'lucide-react';
+import { GitMerge, Pencil, Plus, ToggleLeft, ToggleRight, Trash2, UserPlus } from 'lucide-react';
 import { filterPeople, filterProjects, isAdminLike, type ProjectStatusFilter, type RoleFilter } from '@/lib/adminLists';
+import type { ManualGroup } from '@/lib/manualMerge';
 import type { Project } from '@/lib/worklog';
 
 type Person = { id: string; full_name: string; role: 'admin' | 'user'; email?: string; dev_access?: boolean };
@@ -129,6 +130,63 @@ export function EmployeeList({ t, users, currentId, isLocked, onAddUser, onEditU
               );
             })}
             {!shown.length && <tr><td colSpan={3} className="td-empty">{t.noData}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Manual projects (typed names, not on the project list) and a way to fold each into a registered project.
+export function ManualProjectList({ t, groups, projects, onMerge }: {
+  t: any; groups: ManualGroup[]; projects: Project[]; onMerge: (name: string, projectId: string) => Promise<void>;
+}) {
+  const [pick, setPick] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState('');
+  if (!groups.length) return null;
+  const options = [...projects].sort((a, b) => a.project_code.localeCompare(b.project_code));
+
+  async function merge(g: ManualGroup) {
+    const target = projects.find(p => p.id === (pick[g.name] ?? g.suggestedId));
+    if (!target) return;
+    if (!confirm(t.mergeConfirm.replace('{name}', g.name).replace('{n}', String(g.rows)).replace('{project}', `${target.project_code} ${target.name}`))) return;
+    setBusy(g.name);
+    try { await onMerge(g.name, target.id); } finally { setBusy(''); }
+  }
+
+  return (
+    <div className="admin-section">
+      <div className="section-header">
+        <h2>{t.manualProjects} <span className="records-count">{groups.length}</span></h2>
+      </div>
+      <p className="section-note">{t.manualProjectsNote}</p>
+      <div className="table-wrap">
+        <table className="list-table">
+          <thead><tr><th>{t.manualName}</th><th>{t.mergeInto}</th><th className="col-actions" aria-label={t.actions} /></tr></thead>
+          <tbody>
+            {groups.map(g => {
+              const chosen = pick[g.name] ?? g.suggestedId;
+              return (
+                <tr key={g.name}>
+                  <td>
+                    <div className="list-main">{g.name}</div>
+                    <div className="list-sub">{g.rows} {t.entriesUnit} · {g.hours} {t.hoursUnit} · {g.people} {t.peopleUnit} · {t.lastUsed} {g.last}</div>
+                  </td>
+                  <td>
+                    <select className="field-input merge-select" value={chosen} onChange={e => setPick(p => ({ ...p, [g.name]: e.target.value }))}>
+                      <option value="">{t.pickProjectToMerge}</option>
+                      {options.map(p => <option key={p.id} value={p.id}>{p.project_code} — {p.name}{p.is_active ? '' : ` (${t.inactive})`}</option>)}
+                    </select>
+                    {g.suggestedId && chosen === g.suggestedId && <div className="list-sub merge-hint">{t.mergeSuggested}</div>}
+                  </td>
+                  <td className="col-actions">
+                    <button className="btn-primary merge-btn" disabled={!chosen || busy === g.name} onClick={() => merge(g)}>
+                      <GitMerge size={14} />{busy === g.name ? t.merging : t.merge}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -40,12 +40,6 @@ export function EntryFields({ t, entry, projects, recent, hasV4Schema, showHours
           <ProjectCombobox t={t} entry={entry} projects={projects} recent={recent} allowManual={hasV4Schema} onChange={onChange} />
         </div>
       )}
-      {entry.category === 'project' && !entry.project_id && entry.custom_name && (
-        <div className="entry-field">
-          <label>{t.manualCode}</label>
-          <input className="field-input" value={entry.custom_code} onChange={e => onChange({ custom_code: e.target.value })} />
-        </div>
-      )}
       {hasV4Schema && (
         <div className="entry-field">
           <label>{t.deskripsi}</label>
