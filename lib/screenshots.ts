@@ -23,7 +23,8 @@ export type KeySource = { category: WorkCategory; project_id: string | null; cus
 // Which entry of a day a screenshot belongs to.
 export function entryKey(e: KeySource): string {
   if (e.category === 'project') return e.project_id ? `p-${slug(e.project_id)}` : `m-${slug(e.custom_name)}`;
-  return `${e.category === 'quotation' ? 'q' : 't'}-${slug(e.description.split('\n')[0])}`;
+  const prefix = e.category === 'quotation' ? 'q' : e.category === 'other' ? 'o' : 't';
+  return `${prefix}-${slug(e.description.split('\n')[0])}`;
 }
 
 export function shotFolder(userId: string, date: string, key: string) { return `${userId}/${date}/${key}`; }

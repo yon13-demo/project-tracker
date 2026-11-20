@@ -50,7 +50,7 @@ export function EntryFields({ t, entry, projects, hasV4Schema, showHours = true,
         <div className="entry-field">
           <label>{t.deskripsi}</label>
           <textarea className="field-input entry-description" rows={2} value={entry.description} ref={autoGrow}
-            placeholder={entry.category === 'quotation' ? t.descQuotation : entry.category === 'training' ? t.descTraining : ''}
+            placeholder={entry.category === 'quotation' ? t.descQuotation : entry.category === 'training' ? t.descTraining : entry.category === 'other' ? t.descOther : ''}
             onChange={e => { autoGrow(e.target); onChange({ description: e.target.value }); }} />
         </div>
       )}

@@ -10,6 +10,8 @@ describe('entryKey', () => {
     expect(entryKey({ category: 'project', project_id: OTHER, custom_name: '', description: 'x' })).toBe(`p-${OTHER}`);
     expect(entryKey({ category: 'project', project_id: null, custom_name: 'Survey Lokasi!', description: '' })).toBe('m-survey-lokasi');
     expect(entryKey({ category: 'quotation', project_id: null, custom_name: '', description: 'Pabrik Karawang\nfase 2' })).toBe('q-pabrik-karawang');
+    expect(entryKey({ category: 'other', project_id: null, custom_name: '', description: 'Belajar Revit' })).toBe('o-belajar-revit');
+    expect(entryKey({ category: 'training', project_id: null, custom_name: '', description: 'Belajar Revit' })).toBe('t-belajar-revit');
     expect(entryKey({ category: 'training', project_id: null, custom_name: '', description: '' })).toBe('t-x');
   });
   it('slug keeps only safe characters and never returns empty', () => {

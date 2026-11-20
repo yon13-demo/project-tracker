@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, previousWorkday, mergeSameProject, newEntryDraft, normalizeLogs, saveDay, saveLeaveDay, workLogToExistingEntry, type EntryInput } from './worklog';
+import { CATEGORY_LABEL, WORK_CATEGORIES, buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, previousWorkday, mergeSameProject, newEntryDraft, normalizeLogs, saveDay, saveLeaveDay, workLogToExistingEntry, type EntryInput } from './worklog';
 
 const entry = (patch: Partial<EntryInput>): EntryInput => ({
   category: 'project', project_id: null, custom_name: '', custom_code: '', description: '', hours: 1, ...patch,
@@ -16,6 +16,15 @@ describe('isDraftReady', () => {
   it('does not need a project for quotation and training', () => {
     expect(isDraftReady({ ...newEntryDraft(), category: 'quotation', hours: '1' })).toBe(true);
     expect(isDraftReady({ ...newEntryDraft(), category: 'training', hours: '1' })).toBe(true);
+  });
+  it('needs a description for Lainnya, since it says what the work was', () => {
+    expect(isDraftReady({ ...newEntryDraft(), category: 'other', hours: '1' })).toBe(false);
+    expect(isDraftReady({ ...newEntryDraft(), category: 'other', description: '  ', hours: '1' })).toBe(false);
+    expect(isDraftReady({ ...newEntryDraft(), category: 'other', description: 'Belajar Revit', hours: '1' })).toBe(true);
+  });
+  it('offers Lainnya last, labelled in Bahasa', () => {
+    expect(WORK_CATEGORIES[WORK_CATEGORIES.length - 1]).toBe('other');
+    expect(CATEGORY_LABEL.other).toBe('Lainnya');
   });
   it('rejects missing, zero, negative and non-numeric hours', () => {
     for (const hours of ['', '0', '-1', 'abc']) {

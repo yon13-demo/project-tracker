@@ -93,7 +93,7 @@ const text = {
     useManual: 'Gunakan', manualCode: 'Kode proyek (opsional)', noProjectMatch: 'Proyek tidak ditemukan',
     replaceHint: 'Tanggal ini sudah tercatat. Menyimpan akan mengganti pencatatan sebelumnya.', noLogs: 'Belum ada pencatatan',
     kategori: 'Kategori', deskripsi: 'Deskripsi (opsional)', deskripsiHeader: 'Deskripsi',
-    descQuotation: 'Nama proyek quotation', descTraining: 'Topik training',
+    descQuotation: 'Nama proyek quotation', descTraining: 'Topik training', descOther: 'Contoh: belajar Revit, merapikan dokumen, rapat internal', needDescOther: 'Isi deskripsi untuk kategori Lainnya.',
     timerToday: 'Timer hari ini', startDay: 'Mulai hari', startDaySub: 'Catat waktu kerja secara langsung',
     pauseTimer: 'Pause', resumeTimer: 'Lanjut', popOut: 'Pop out', finishDay: 'Selesai & kirim',
     addTimerItem: '+ Tambah', add: 'Tambah', totalToday: 'Total hari ini',
@@ -164,7 +164,7 @@ const text = {
     useManual: 'Use', manualCode: 'Project code (optional)', noProjectMatch: 'No matching project',
     replaceHint: 'This date already has entries. Saving will replace them.', noLogs: 'No entries yet',
     kategori: 'Category', deskripsi: 'Description (optional)', deskripsiHeader: 'Description',
-    descQuotation: 'Quotation project name', descTraining: 'Training topic',
+    descQuotation: 'Quotation project name', descTraining: 'Training topic', descOther: 'e.g. learning Revit, tidying documents, internal meeting', needDescOther: 'Add a description for the Lainnya category.',
     timerToday: "Today's timer", startDay: 'Start day', startDaySub: 'Track your work time live',
     pauseTimer: 'Pause', resumeTimer: 'Resume', popOut: 'Pop out', finishDay: 'Finish & send',
     addTimerItem: '+ Add', add: 'Add', totalToday: 'Total today',
@@ -1066,7 +1066,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
     if (!selectedDate) return;
     if (isLeaveMode) return handleMarkLeave();
     for (const e of dateEntries) {
-      if (!isDraftReady(e, { requireHours: false })) { showAlert(lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
+      if (!isDraftReady(e, { requireHours: false })) { showAlert(e.category === 'other' ? t.needDescOther : lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
       if (!isDraftReady(e)) { showAlert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return; }
     }
     setSaving(true);
