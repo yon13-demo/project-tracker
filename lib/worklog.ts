@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { entryKey } from './screenshots';
 
-export type WorkCategory = 'project' | 'quotation' | 'training';
-export const WORK_CATEGORIES: WorkCategory[] = ['project', 'quotation', 'training'];
-export const CATEGORY_LABEL: Record<WorkCategory, string> = { project: 'Project', quotation: 'Quotation', training: 'Training' };
+export type WorkCategory = 'project' | 'quotation' | 'training' | 'other';
+export const WORK_CATEGORIES: WorkCategory[] = ['project', 'quotation', 'training', 'other'];
+export const CATEGORY_LABEL: Record<WorkCategory, string> = { project: 'Project', quotation: 'Quotation', training: 'Training', other: 'Lainnya' };
 
 export type Project = { id: string; project_code: string; name: string; company?: string; description: string; is_active: boolean; inactive_from: string | null };
 export type WorkLog = {
@@ -30,7 +30,9 @@ export type EntryInput = {
 };
 
 export function isDraftReady(d: EntryDraft, opts: { requireHours?: boolean } = {}): boolean {
-  const hasTarget = d.category !== 'project' || Boolean(d.project_id) || Boolean(d.custom_name.trim());
+  // Lainnya is free-form, so its description is what says what the work was.
+  const hasTarget = d.category === 'other' ? Boolean(d.description.trim())
+    : d.category !== 'project' || Boolean(d.project_id) || Boolean(d.custom_name.trim());
   if (!hasTarget) return false;
   if (opts.requireHours === false) return true;
   const hours = Number(d.hours);

@@ -878,6 +878,7 @@ tbody tr:hover { background: #fafbff; }
 .cat-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--line2); color: var(--muted); }
 .cat-tag.cat-quotation { background: var(--brand-soft); color: var(--brand); }
 .cat-tag.cat-training { background: var(--success-soft); color: var(--success); }
+.cat-tag.cat-other { background: var(--line); color: var(--muted); }
 .btn-action.shots-count { gap: 4px; font-size: 12px; font-weight: 600; color: var(--brand); border-color: var(--brand-border); background: var(--brand-soft); }
 .records-more { justify-self: center; }
 
