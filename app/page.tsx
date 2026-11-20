@@ -23,7 +23,8 @@ import { AttendanceBar, clockedHours, useAttendance } from '@/components/Attenda
 import { AllocationBar, entryColor } from '@/components/AllocationBar';
 import { leaveLabel } from '@/lib/attendance';
 import { RecordsTable } from '@/components/RecordsTable';
-import { EmployeeList, ProjectList } from '@/components/AdminLists';
+import { EmployeeList, ManualProjectList, ProjectList } from '@/components/AdminLists';
+import { manualProjectGroups } from '@/lib/manualMerge';
 import { HoursHero } from '@/components/HoursHero';
 import { useScreenshots } from '@/components/useScreenshots';
 import { entryKey } from '@/lib/screenshots';
@@ -90,10 +91,10 @@ const text = {
     switchToEmployee: 'Karyawan', switchToAdmin: 'Admin',
     logWork: 'Catat jam kerja', logWorkSub: 'Proyek & jam per tanggal', myLogs: 'Pencatatan saya',
     jenis: 'Jenis', kerja: 'Kerja', close: 'Tutup', manual: 'Manual', logged: 'Tercatat',
-    useManual: 'Gunakan', manualCode: 'Kode proyek (opsional)', noProjectMatch: 'Proyek tidak ditemukan',
+    useManual: 'Gunakan', noProjectMatch: 'Proyek tidak ditemukan',
     replaceHint: 'Tanggal ini sudah tercatat. Menyimpan akan mengganti pencatatan sebelumnya.', noLogs: 'Belum ada pencatatan',
     kategori: 'Kategori', deskripsi: 'Deskripsi (opsional)', deskripsiHeader: 'Deskripsi',
-    recentProjects: 'Terakhir dipakai', allProjects: 'Semua proyek', recentShort: 'Terakhir:', descQuotation: 'Nama proyek quotation', descTraining: 'Topik training', descOther: 'Contoh: belajar Revit, merapikan dokumen, rapat internal', needDescOther: 'Isi deskripsi untuk kategori Lainnya.',
+    matchByCode: 'Nomor proyek ini sudah terdaftar', manualProjects: 'Proyek manual', manualProjectsNote: 'Nama proyek yang diketik sendiri, belum terhubung ke daftar proyek. Gabungkan ke proyek terdaftar agar jamnya terhitung di satu proyek.', manualName: 'Nama yang diketik', mergeInto: 'Gabungkan ke', pickProjectToMerge: 'Pilih proyek…', mergeSuggested: 'Disarankan dari nomor proyek', merge: 'Gabungkan', merging: 'Menggabungkan…', mergeConfirm: 'Gabungkan {n} entri "{name}" ke {project}? Entri di hari yang sama dengan proyek itu akan dijumlahkan.', mergeDone: '{n} entri digabungkan.', entriesUnit: 'entri', peopleUnit: 'orang', lastUsed: 'terakhir', recentProjects: 'Terakhir dipakai', allProjects: 'Semua proyek', recentShort: 'Terakhir:', descQuotation: 'Nama proyek quotation', descTraining: 'Topik training', descOther: 'Contoh: belajar Revit, merapikan dokumen, rapat internal', needDescOther: 'Isi deskripsi untuk kategori Lainnya.',
     timerToday: 'Timer hari ini', startDay: 'Mulai hari', startDaySub: 'Catat waktu kerja secara langsung',
     pauseTimer: 'Pause', resumeTimer: 'Lanjut', popOut: 'Pop out', finishDay: 'Selesai & kirim',
     addTimerItem: '+ Tambah', add: 'Tambah', totalToday: 'Total hari ini',
@@ -161,10 +162,10 @@ const text = {
     support: 'Support',
     logWork: 'Log work hours', logWorkSub: 'Projects & hours per date', myLogs: 'My entries',
     jenis: 'Type', kerja: 'Work', close: 'Close', manual: 'Manual', logged: 'Logged',
-    useManual: 'Use', manualCode: 'Project code (optional)', noProjectMatch: 'No matching project',
+    useManual: 'Use', noProjectMatch: 'No matching project',
     replaceHint: 'This date already has entries. Saving will replace them.', noLogs: 'No entries yet',
     kategori: 'Category', deskripsi: 'Description (optional)', deskripsiHeader: 'Description',
-    recentProjects: 'Recently used', allProjects: 'All projects', recentShort: 'Recent:', descQuotation: 'Quotation project name', descTraining: 'Training topic', descOther: 'e.g. learning Revit, tidying documents, internal meeting', needDescOther: 'Add a description for the Lainnya category.',
+    matchByCode: 'This project number is registered', manualProjects: 'Manual projects', manualProjectsNote: 'Project names typed by hand, not linked to the project list. Merge them into a registered project so their hours count in one place.', manualName: 'Typed name', mergeInto: 'Merge into', pickProjectToMerge: 'Pick project…', mergeSuggested: 'Suggested from the project number', merge: 'Merge', merging: 'Merging…', mergeConfirm: 'Merge {n} entries "{name}" into {project}? Entries on a day that already has that project are added together.', mergeDone: '{n} entries merged.', entriesUnit: 'entries', peopleUnit: 'people', lastUsed: 'last', recentProjects: 'Recently used', allProjects: 'All projects', recentShort: 'Recent:', descQuotation: 'Quotation project name', descTraining: 'Training topic', descOther: 'e.g. learning Revit, tidying documents, internal meeting', needDescOther: 'Add a description for the Lainnya category.',
     timerToday: "Today's timer", startDay: 'Start day', startDaySub: 'Track your work time live',
     pauseTimer: 'Pause', resumeTimer: 'Resume', popOut: 'Pop out', finishDay: 'Finish & send',
     addTimerItem: '+ Add', add: 'Add', totalToday: 'Total today',
@@ -233,6 +234,7 @@ function formatLogAction(action: string, details: any, lang: Lang): string {
     UPDATE_ROLE: lang === 'id' ? 'Ubah role' : 'Change role',
     TOGGLE_SIGNUP: lang === 'id' ? 'Toggle buat akun' : 'Toggle signup',
     SET_DOMAIN: lang === 'id' ? 'Set domain login' : 'Set login domain',
+    MERGE_MANUAL_PROJECT: lang === 'id' ? 'Gabungkan proyek manual' : 'Merge manual project',
   };
   let base = map[action] || action;
   if (action === 'UPDATE_ROLE' && details) {
@@ -245,6 +247,8 @@ function formatLogAction(action: string, details: any, lang: Lang): string {
     base += `: ${details.allow_signup ? 'ON' : 'OFF'}`;
   } else if (action === 'SET_DOMAIN' && details) {
     base += `: ${details.login_domain}`;
+  } else if (action === 'MERGE_MANUAL_PROJECT' && details) {
+    base += `: "${details.manual_name}" → ${details.project_code} ${details.project_name} (${details.entries})`;
   }
   return base;
 }
@@ -476,6 +480,20 @@ export default function Home() {
     if (error) showAlert(error.message); else load();
   }
 
+  async function mergeManualProject(name: string, projectId: string) {
+    showStatus(lang === 'id' ? 'Menggabungkan…' : 'Merging…');
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/admin/merge-manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ name, projectId }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { showAlert(body.error || 'Error'); return; }
+    showStatus(t.mergeDone.replace('{n}', String(body.merged ?? 0)));
+    load();
+  }
+
   async function deleteProjectFn(project: Project) {
     if (!confirm(`${t.delete} ${project.name}?`)) return;
     showStatus(lang === 'id' ? 'Menghapus proyek…' : 'Deleting project…');
@@ -677,7 +695,7 @@ export default function Home() {
           t={t} lang={lang} projects={projects} users={users} workLogs={workLogs}
           query={query} setQuery={setQuery} sortBy={sortBy} setSortBy={setSortBy}
           onExport={exportExcel} onCreate={() => setCreateOpen(true)}
-          onEdit={setEditProject} onDelete={deleteProjectFn} onToggleActive={toggleProjectActive}
+          onEdit={setEditProject} onDelete={deleteProjectFn} onToggleActive={toggleProjectActive} onMergeManual={mergeManualProject}
           onAddUser={() => setUserOpen('new')} onEditUser={setUserOpen} onDeleteUser={deleteUser}
           onUpdateRole={updateUserRole}
           showCheckHours={showCheckHours} setShowCheckHours={setShowCheckHours}
@@ -1277,13 +1295,14 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
 
 function AdminView({
   t, lang, projects, users, workLogs, query, setQuery, sortBy, setSortBy,
-  onExport, onCreate, onEdit, onDelete, onToggleActive,
+  onExport, onCreate, onEdit, onDelete, onToggleActive, onMergeManual,
   onAddUser, onEditUser, onDeleteUser, onUpdateRole,
   showCheckHours, setShowCheckHours, checkHoursDetail, setCheckHoursDetail,
   showAdminLogs, setShowAdminLogs, showAdminSettings, setShowAdminSettings,
   adminSettings, onSaveSettings, currentProfile,
 }: any) {
   const totalHours = workLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
+  const manualGroups = useMemo(() => manualProjectGroups(workLogs, projects), [workLogs, projects]);
   const exportMonths = getExportMonths();
   const [exportPeriod, setExportPeriod] = useState('all');
   const [fromDate, setFromDate] = useState('');
@@ -1400,6 +1419,7 @@ function AdminView({
       </div>
 
       <ProjectList t={t} projects={projects} onCreate={onCreate} onEdit={onEdit} onToggleActive={onToggleActive} onDelete={onDelete} />
+      <ManualProjectList t={t} groups={manualGroups} projects={projects} onMerge={onMergeManual} />
 
       <EmployeeList t={t} users={visibleEmployeeUsers} currentId={currentProfile?.id} isLocked={(u: Profile) => Boolean(u.dev_access) && !isDeveloperEmail(u.email)}
         onAddUser={onAddUser} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUpdateRole={onUpdateRole} />

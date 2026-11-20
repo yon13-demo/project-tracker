@@ -327,6 +327,7 @@ p { margin: 0; color: var(--muted); }
 .combobox-manual { justify-content: flex-start; color: var(--brand); font-weight: 600; }
 .combobox-empty { padding: 8px 10px; color: var(--muted); font-size: 13px; }
 .combobox-item { list-style: none; }
+.combobox-group.match { color: var(--success); }
 .combobox-group { padding: 8px 10px 4px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .combobox-item + .combobox-item .combobox-group { margin-top: 4px; border-top: 1px solid var(--line); }
 .recent-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
@@ -918,6 +919,11 @@ tbody tr:hover { background: #fafbff; }
 .list-table .col-actions { width: 132px; text-align: right; }
 .list-main { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
 .list-sub { margin-top: 2px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.section-note { margin: -4px 0 10px; font-size: 13px; color: var(--muted); }
+.merge-select { min-width: 220px; max-width: 360px; padding: 6px 8px; font-size: 13px; }
+.merge-hint { color: var(--success); }
+.merge-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.merge-btn:disabled { opacity: .5; cursor: not-allowed; }
 .list-you { font-weight: 500; font-size: 12px; color: var(--muted); }
 .list-actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
 .btn-action.icon { width: 32px; height: 32px; padding: 0; justify-content: center; }
