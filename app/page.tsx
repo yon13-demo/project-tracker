@@ -13,7 +13,7 @@ import { showAlert, showStatus, registerNotifiers } from '@/lib/notify';
 import {
   CATEGORY_LABEL, draftToEntry, groupLogsByProject, isDraftReady, isManualProject, logProjectCode, logProjectName, newEntryDraft, saveDay,
   type EntryDraft, type Project, type WorkCategory, type WorkLog,
-  LOG_COLUMNS, LOG_COLUMNS_V4, normalizeLogs, previousWorkday, saveLeaveDay,
+  LOG_COLUMNS, LOG_COLUMNS_V4, normalizeLogs, previousWorkday, recentProjects, saveLeaveDay,
 } from '@/lib/worklog';
 import { EntryFields } from '@/components/EntryFields';
 import { DayTimerPanel } from '@/components/DayTimerPanel';
@@ -93,7 +93,7 @@ const text = {
     useManual: 'Gunakan', manualCode: 'Kode proyek (opsional)', noProjectMatch: 'Proyek tidak ditemukan',
     replaceHint: 'Tanggal ini sudah tercatat. Menyimpan akan mengganti pencatatan sebelumnya.', noLogs: 'Belum ada pencatatan',
     kategori: 'Kategori', deskripsi: 'Deskripsi (opsional)', deskripsiHeader: 'Deskripsi',
-    descQuotation: 'Nama proyek quotation', descTraining: 'Topik training', descOther: 'Contoh: belajar Revit, merapikan dokumen, rapat internal', needDescOther: 'Isi deskripsi untuk kategori Lainnya.',
+    recentProjects: 'Terakhir dipakai', allProjects: 'Semua proyek', recentShort: 'Terakhir:', descQuotation: 'Nama proyek quotation', descTraining: 'Topik training', descOther: 'Contoh: belajar Revit, merapikan dokumen, rapat internal', needDescOther: 'Isi deskripsi untuk kategori Lainnya.',
     timerToday: 'Timer hari ini', startDay: 'Mulai hari', startDaySub: 'Catat waktu kerja secara langsung',
     pauseTimer: 'Pause', resumeTimer: 'Lanjut', popOut: 'Pop out', finishDay: 'Selesai & kirim',
     addTimerItem: '+ Tambah', add: 'Tambah', totalToday: 'Total hari ini',
@@ -164,7 +164,7 @@ const text = {
     useManual: 'Use', manualCode: 'Project code (optional)', noProjectMatch: 'No matching project',
     replaceHint: 'This date already has entries. Saving will replace them.', noLogs: 'No entries yet',
     kategori: 'Category', deskripsi: 'Description (optional)', deskripsiHeader: 'Description',
-    descQuotation: 'Quotation project name', descTraining: 'Training topic', descOther: 'e.g. learning Revit, tidying documents, internal meeting', needDescOther: 'Add a description for the Lainnya category.',
+    recentProjects: 'Recently used', allProjects: 'All projects', recentShort: 'Recent:', descQuotation: 'Quotation project name', descTraining: 'Training topic', descOther: 'e.g. learning Revit, tidying documents, internal meeting', needDescOther: 'Add a description for the Lainnya category.',
     timerToday: "Today's timer", startDay: 'Start day', startDaySub: 'Track your work time live',
     pauseTimer: 'Pause', resumeTimer: 'Resume', popOut: 'Pop out', finishDay: 'Finish & send',
     addTimerItem: '+ Add', add: 'Add', totalToday: 'Total today',
@@ -972,6 +972,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
   const [listView, setListView] = useState<'day' | 'project'>('day');
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   const projectGroups = useMemo(() => groupLogsByProject(workLogs), [workLogs]);
+  const recent = useMemo(() => recentProjects(workLogs, projects), [workLogs, projects]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [saving, setSaving] = useState(false);
   const [dateEntries, setDateEntries] = useState<EntryDraft[]>([newEntryDraft()]);
@@ -1141,7 +1142,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
                       const key = ready ? entryKey(entry) : '';
                       const upload = (files: File[]) => void shotsApi.upload(selectedDate, key, files);
                       return (
-                        <EntryFields t={t} entry={entry} projects={projects} hasV4Schema={hasV4Schema}
+                        <EntryFields t={t} entry={entry} projects={projects} recent={recent} hasV4Schema={hasV4Schema}
                           onChange={patch => updateEntry(entry.tempId, patch)}
                           onPasteFiles={ready ? upload : undefined}
                           extra={ready

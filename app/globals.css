@@ -326,6 +326,16 @@ p { margin: 0; color: var(--muted); }
 .combobox-option.active { background: var(--brand-soft); }
 .combobox-manual { justify-content: flex-start; color: var(--brand); font-weight: 600; }
 .combobox-empty { padding: 8px 10px; color: var(--muted); font-size: 13px; }
+.combobox-item { list-style: none; }
+.combobox-group { padding: 8px 10px 4px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.combobox-item + .combobox-item .combobox-group { margin-top: 4px; border-top: 1px solid var(--line); }
+.recent-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.recent-chips-label { font-size: 12px; color: var(--muted); }
+.recent-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 220px; padding: 4px 10px; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--card); color: var(--ink); font-size: 12px; cursor: pointer; }
+.recent-chip:hover { border-color: var(--brand); background: var(--brand-soft); }
+.recent-chip strong { flex-shrink: 0; font-weight: 700; color: var(--brand); }
+.recent-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ─── Day timer ──────────────────────────────────────────────────────────── */
 .timer-cta { margin-bottom: 12px; }

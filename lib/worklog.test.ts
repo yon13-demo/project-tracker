@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { CATEGORY_LABEL, WORK_CATEGORIES, buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, previousWorkday, mergeSameProject, newEntryDraft, normalizeLogs, saveDay, saveLeaveDay, workLogToExistingEntry, type EntryInput } from './worklog';
+import { CATEGORY_LABEL, recentProjects, WORK_CATEGORIES, buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, previousWorkday, mergeSameProject, newEntryDraft, normalizeLogs, saveDay, saveLeaveDay, workLogToExistingEntry, type EntryInput } from './worklog';
 
 const entry = (patch: Partial<EntryInput>): EntryInput => ({
   category: 'project', project_id: null, custom_name: '', custom_code: '', description: '', hours: 1, ...patch,
@@ -228,5 +228,46 @@ describe('previousWorkday', () => {
   it('crosses month and year boundaries', () => {
     expect(previousWorkday('2026-12-01')).toBe('2026-11-30');
     expect(previousWorkday('2027-01-01')).toBe('2026-12-31');
+  });
+});
+
+describe('recentProjects', () => {
+  const proj = (id: string, active = true) => ({ id, project_code: `C-${id}`, name: `Proj ${id}`, description: '', is_active: active, inactive_from: null });
+  const projects = [proj('p1'), proj('p2'), proj('p3'), proj('old', false)];
+  const log = (log_date: string, patch: Record<string, unknown>) => ({ id: String(Math.random()), user_id: 'u', log_date, project_id: null, hours: 1, is_leave: false, ...patch }) as any;
+
+  it('lists projects by the latest day they were logged, each once', () => {
+    const logs = [
+      log('2026-11-10', { project_id: 'p1' }),
+      log('2026-11-18', { project_id: 'p2' }),
+      log('2026-11-12', { project_id: 'p3' }),
+      log('2026-11-19', { project_id: 'p1' }),
+    ];
+    expect(recentProjects(logs, projects).map(r => r.project_id)).toEqual(['p1', 'p2', 'p3']);
+  });
+  it('includes manual projects, merged by name, and uses the registered name and code', () => {
+    const logs = [
+      log('2026-11-19', { custom_project_name: 'Survey Lokasi', custom_project_code: 'SV-1' }),
+      log('2026-11-15', { custom_project_name: 'survey lokasi ' }),
+      log('2026-11-18', { project_id: 'p2' }),
+    ];
+    expect(recentProjects(logs, projects)).toEqual([
+      { project_id: '', name: 'Survey Lokasi', code: 'SV-1' },
+      { project_id: 'p2', name: 'Proj p2', code: 'C-p2' },
+    ]);
+  });
+  it('skips leave days, other categories and projects no longer on the list', () => {
+    const logs = [
+      log('2026-11-19', { is_leave: true }),
+      log('2026-11-19', { category: 'quotation', description: 'x' }),
+      log('2026-11-18', { project_id: 'old' }),
+      log('2026-11-17', { project_id: 'gone' }),
+      log('2026-11-16', { project_id: 'p3' }),
+    ];
+    expect(recentProjects(logs, projects.filter(p => p.is_active)).map(r => r.project_id)).toEqual(['p3']);
+  });
+  it('stops at the limit', () => {
+    const logs = ['p1', 'p2', 'p3'].map((id, i) => log(`2026-11-1${i}`, { project_id: id }));
+    expect(recentProjects(logs, projects, 2).map(r => r.project_id)).toEqual(['p3', 'p2']);
   });
 });

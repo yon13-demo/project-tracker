@@ -3,13 +3,13 @@
 import { useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import { currentItemId, dayTotal, draftToTimerItem, formatClock, itemTotals } from '@/lib/dayTimer';
-import { isDraftReady, newEntryDraft, type EntryDraft, type Project } from '@/lib/worklog';
+import { isDraftReady, newEntryDraft, type EntryDraft, type Project, type RecentProject } from '@/lib/worklog';
 import { EntryFields } from './EntryFields';
 import { AwayPrompt } from './AwayPrompt';
 import type { DayTimer } from './useDayTimer';
 
-export function TimerBody({ t, timer, projects, hasV4Schema, compact = false }: {
-  t: any; timer: DayTimer; projects: Project[]; hasV4Schema: boolean; compact?: boolean;
+export function TimerBody({ t, timer, projects, recent, hasV4Schema, compact = false }: {
+  t: any; timer: DayTimer; projects: Project[]; recent?: RecentProject[]; hasV4Schema: boolean; compact?: boolean;
 }) {
   const [draft, setDraft] = useState<EntryDraft | null>(null);
   const { state, now } = timer;
@@ -50,7 +50,7 @@ export function TimerBody({ t, timer, projects, hasV4Schema, compact = false }: 
 
       {draft ? (
         <div className="timer-add">
-          <EntryFields t={t} entry={draft} projects={projects} hasV4Schema={hasV4Schema} showHours={false}
+          <EntryFields t={t} entry={draft} projects={projects} recent={recent} hasV4Schema={hasV4Schema} showHours={false}
             onChange={patch => setDraft(d => (d ? { ...d, ...patch } : d))} />
           <div className="timer-add-actions">
             <button className="btn-secondary" onClick={() => setDraft(null)}>{t.cancel}</button>
