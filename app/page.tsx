@@ -112,7 +112,7 @@ const text = {
     maxScreenshots: 'Maksimal 5 screenshot per entri.', noScreenshots: 'Tidak ada screenshot.',
     viewByDay: 'Per hari', viewByProject: 'Per proyek', daysCount: 'hari', totalLabel: 'Total',
     attendance: 'Absensi', attLoading: 'Memuat absensi…', attUnavailable: 'Absensi tidak tersedia saat ini.', attNotLinked: 'Email ini belum terhubung ke absensi.',
-    attNoClock: 'Tidak ada absen di tanggal ini.', attClockIn: 'masuk', attNoClockOut: 'belum ada absen pulang', yesterday: 'Kemarin', fillPrevDay: 'Isi {day} — belum dilaporkan', attOnThisDay: 'di tanggal ini', markAsLeave: 'Tandai cuti', attOvertime: 'lembur', hoursUnit: 'jam',
+    attNoClock: 'Tidak ada absen di tanggal ini.', attClockIn: 'masuk', attRefresh: 'Muat ulang absensi', attNoClockOut: 'belum ada absen pulang', yesterday: 'Kemarin', fillPrevDay: 'Isi {day} — belum dilaporkan', attOnThisDay: 'di tanggal ini', markAsLeave: 'Tandai cuti', attOvertime: 'lembur', hoursUnit: 'jam',
     attLogged: 'Tercatat', attRemaining: 'belum dialokasikan', attOver: 'lebih dari absensi', attMatch: 'sesuai absensi',
     allocTitle: 'Bagi jam absensi', allocTitleNoAtt: 'Bagi jam kerja', allocPick: 'Pilih proyek', allocFree: 'belum dialokasikan', allocBreakNote: 'boleh dibiarkan untuk istirahat', allocFill: 'Isi sisa', allocFillInto: 'Isi sisa ke pekerjaan', allocDragToAdd: 'Tarik untuk menambah pekerjaan',
     reviewLeaveNotice: 'Tanggal ini tercatat sebagai cuti. Mengirim akan mengganti cuti dengan jam kerja ini.',
@@ -183,7 +183,7 @@ const text = {
     maxScreenshots: 'Up to 5 screenshots per entry.', noScreenshots: 'No screenshots.',
     viewByDay: 'By day', viewByProject: 'By project', daysCount: 'days', totalLabel: 'Total',
     attendance: 'Attendance', attLoading: 'Loading attendance…', attUnavailable: 'Attendance is unavailable right now.', attNotLinked: 'This email is not linked to attendance.',
-    attNoClock: 'No clocking on this date.', attClockIn: 'in', attNoClockOut: 'no clock-out yet', yesterday: 'Yesterday', fillPrevDay: 'Fill {day} — not reported yet', attOnThisDay: 'on this date', markAsLeave: 'Mark as leave', attOvertime: 'overtime', hoursUnit: 'h',
+    attNoClock: 'No clocking on this date.', attClockIn: 'in', attRefresh: 'Reload attendance', attNoClockOut: 'no clock-out yet', yesterday: 'Yesterday', fillPrevDay: 'Fill {day} — not reported yet', attOnThisDay: 'on this date', markAsLeave: 'Mark as leave', attOvertime: 'overtime', hoursUnit: 'h',
     attLogged: 'Logged', attRemaining: 'not assigned yet', attOver: 'more than attendance', attMatch: 'matches attendance',
     allocTitle: 'Split attendance hours', allocTitleNoAtt: 'Split work hours', allocPick: 'Pick project', allocFree: 'not allocated', allocBreakNote: 'fine to leave for a break', allocFill: 'Fill remaining', allocFillInto: 'Fill remaining into entry', allocDragToAdd: 'Drag to add an entry',
     reviewLeaveNotice: 'This date is marked as leave. Sending will replace the leave with these work hours.',
@@ -978,7 +978,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
   const [isLeaveMode, setIsLeaveMode] = useState(false);
   const [leaveNote, setLeaveNote] = useState(''); // leave type from attendance, saved as the description
   const addEntryRef = useRef<HTMLButtonElement>(null);
-  const attendanceState = useAttendance(formOpen ? selectedDate : '');
+  const [attendanceState, reloadAttendance, attendanceRefreshing] = useAttendance(formOpen ? selectedDate : '');
   const attendanceDay = attendanceState.status === 'ok' ? attendanceState.day : null;
   const [addedEntryId, setAddedEntryId] = useState<string | null>(null);
   const shotDates = useMemo(
@@ -1117,7 +1117,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
               {logsByDate[selectedDate] && <p className="worklog-hint">{t.replaceHint}</p>}
             </div>
 
-            <AttendanceBar t={t} state={attendanceState} isLeaveMode={isLeaveMode}
+            <AttendanceBar t={t} state={attendanceState} isLeaveMode={isLeaveMode} onRefresh={reloadAttendance} refreshing={attendanceRefreshing}
               loggedHours={dateEntries.reduce((sum, e) => sum + (Number(e.hours) > 0 ? Number(e.hours) : 0), 0)}
               onMarkLeave={type => { setIsLeaveMode(true); setLeaveNote(leaveLabel(type)); }} />
 
