@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, mergeSameProject, newEntryDraft, normalizeLogs, saveDay, saveLeaveDay, workLogToExistingEntry, type EntryInput } from './worklog';
+import { buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, previousWorkday, mergeSameProject, newEntryDraft, normalizeLogs, saveDay, saveLeaveDay, workLogToExistingEntry, type EntryInput } from './worklog';
 
 const entry = (patch: Partial<EntryInput>): EntryInput => ({
   category: 'project', project_id: null, custom_name: '', custom_code: '', description: '', hours: 1, ...patch,
@@ -203,5 +203,21 @@ describe('per-project groups carry the screenshot key of their entry', () => {
     const log = (patch: Record<string, unknown>) => ({ id: String(Math.random()), user_id: 'u', log_date: '2026-10-14', project_id: null, hours: 1, is_leave: false, ...patch }) as any;
     const groups = groupLogsByProject([log({ custom_project_name: 'Survey Lokasi' }), log({ category: 'quotation', description: 'Pabrik' })]);
     expect(groups.map(g => g.shotKey).sort()).toEqual(['m-survey-lokasi', 'q-pabrik']);
+  });
+});
+
+describe('previousWorkday', () => {
+  it('is yesterday on Tuesday to Friday', () => {
+    expect(previousWorkday('2026-11-20')).toBe('2026-11-19');
+    expect(previousWorkday('2026-11-17')).toBe('2026-11-16');
+  });
+  it('skips the weekend back to Friday', () => {
+    expect(previousWorkday('2026-11-23')).toBe('2026-11-20'); // Monday
+    expect(previousWorkday('2026-11-22')).toBe('2026-11-20'); // Sunday
+    expect(previousWorkday('2026-11-21')).toBe('2026-11-20'); // Saturday
+  });
+  it('crosses month and year boundaries', () => {
+    expect(previousWorkday('2026-12-01')).toBe('2026-11-30');
+    expect(previousWorkday('2027-01-01')).toBe('2026-12-31');
   });
 });

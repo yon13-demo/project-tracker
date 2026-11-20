@@ -47,6 +47,12 @@ export function fromAttendanceReply(date: string, reply: unknown): AttendanceDay
   return summarizeDay(date, Array.isArray(r.hours) ? r.hours : [], Array.isArray(r.leaves) ? r.leaves : []);
 }
 
+// Clocked in but no clock-out: the day is still open (or the clock-out was forgotten),
+// so its hours are not final and must not be compared with what is logged.
+export function isClockOpen(day: AttendanceDay): boolean {
+  return Boolean(day.firstIn) && !day.lastOut;
+}
+
 // Approved leave that was actually taken (not a cuti bersama worked through, not a weekend inside a range).
 export function pickLeave(leaves: LeaveRow[]): LeaveType | null {
   const taken = leaves.find(l => l.status === 'approved' && !l.worked && !l.is_rest_day);

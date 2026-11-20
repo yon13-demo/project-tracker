@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clockTime, fromAttendanceReply, hoursGap, leaveLabel, pickLeave, summarizeDay, type LeaveRow } from './attendance';
+import { clockTime, fromAttendanceReply, hoursGap, isClockOpen, leaveLabel, pickLeave, summarizeDay, type LeaveRow } from './attendance';
 
 const leave = (patch: Partial<LeaveRow>): LeaveRow => ({ leave_type: 'cuti', status: 'approved', worked: false, is_rest_day: false, ...patch });
 
@@ -75,5 +75,16 @@ describe('fromAttendanceReply', () => {
   });
   it('tolerates missing lists', () => {
     expect(fromAttendanceReply('2026-11-17', { matched: true })).toMatchObject({ matched: true, hours: null, leave: null });
+  });
+});
+
+describe('isClockOpen', () => {
+  const day = (firstIn: string | null, lastOut: string | null) => summarizeDay('2026-11-19', firstIn || lastOut ? [{ first_in: firstIn, last_out: lastOut, regular_hours: 0, overtime_hours: 0, tz: null }] : [], []);
+  it('is true when clocked in but never out', () => {
+    expect(isClockOpen(day('2026-11-19T01:43:00Z', null))).toBe(true);
+  });
+  it('is false for a complete day or no clocking', () => {
+    expect(isClockOpen(day('2026-11-19T01:43:00Z', '2026-11-19T10:00:00Z'))).toBe(false);
+    expect(isClockOpen(day(null, null))).toBe(false);
   });
 });
