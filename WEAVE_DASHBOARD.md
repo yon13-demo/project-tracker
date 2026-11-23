@@ -79,7 +79,7 @@ A realistic example for Wed 2026-11-25, 23 people:
 
 ```json
 {
-  "generated_at": "2026-11-25T09:12:04.51+07:00",
+  "generated_at": "2026-11-25T02:12:04.51+00:00",
   "timezone": "Asia/Jakarta",
   "date": "2026-11-25",
   "periods": {
@@ -128,7 +128,7 @@ A realistic example for Wed 2026-11-25, 23 people:
     "today": {
       "date": "2026-11-25", "expected": 23,
       "clocked_in": 20, "still_in": 20, "clocked_out": 0, "on_leave": 1, "not_clocked_in": 2,
-      "synced_at": "2026-11-25T09:10:02.8+07:00", "minutes_since_sync": 2, "is_stale": false
+      "synced_at": "2026-11-25T02:10:02.8+00:00", "minutes_since_sync": 2, "is_stale": false
     }
   }
 }
@@ -138,8 +138,8 @@ A realistic example for Wed 2026-11-25, 23 people:
 
 | Field | Meaning | Unit | `null` means |
 |---|---|---|---|
-| `generated_at` | When the database built this answer | ISO timestamp, +07:00 | never null |
-| `timezone` | Always `Asia/Jakarta`. All dates are WIB. | | never null |
+| `generated_at` | When the database built this answer | ISO timestamp in UTC (`+00:00`). Convert to WIB for display. | never null |
+| `timezone` | Always `Asia/Jakarta`. All *dates* (`YYYY-MM-DD`) are WIB days; timestamps are UTC. | | never null |
 | `date` | The `p_date` used | date | never null |
 | `periods.*.from/to` | Inclusive date ranges (see §3) | date | never null |
 | `periods.week.iso_week` | ISO week number of `date` | integer | never null |
@@ -179,7 +179,7 @@ A realistic example for Wed 2026-11-25, 23 people:
 | `…clocked_out` | Clocked in and out | people | never null |
 | `…on_leave` | Approved leave on `date` and not clocked in | people | never null |
 | `…not_clocked_in` | `expected − clocked_in − on_leave`, never below 0 | people | never null |
-| `…synced_at` | Last time the attendance sync got an answer | ISO timestamp | the sync has never run |
+| `…synced_at` | Last time the attendance sync got an answer | ISO timestamp, UTC | the sync has never run |
 | `…minutes_since_sync` | Minutes since `synced_at` | minutes | `synced_at` is null |
 | `…is_stale` | `true` when the last sync was more than 30 minutes ago (or never). The today figures may then be out of date. | boolean | never null |
 
@@ -244,7 +244,7 @@ Status colours (green / amber / red) are always paired with an icon or text (▲
 
 - **Null:** show an em dash `—` in muted grey. Never show `0` or `NaN` for a null.
 - **Zero target or zero base:** `expected = 0` shows the ring empty with "Belum ada pengguna". Previous period 0 shows "—" for the change, never "+∞%". `clocked_hours = 0` shows "Belum ada data absensi".
-- **Timezone:** every date and time in the response is WIB (Asia/Jakarta, UTC+7). Format timestamps with `timeZone: 'Asia/Jakarta'`, not the TV's local zone.
+- **Timezone:** every `YYYY-MM-DD` date in the response is already a WIB (Asia/Jakarta, UTC+7) day. Timestamps (`generated_at`, `synced_at`) are UTC: format them with `timeZone: 'Asia/Jakarta'`, never the TV's local zone.
 - **Long project names:** one line, ellipsis. The project code is always shown in full.
 
 ## 8. Refresh
@@ -312,6 +312,19 @@ ERROR:  permission denied for function weave_run_attendance_sync
 
 Signed-in users are unaffected: they still read their own entries and `is_admin()` still works.
 
-**Live test** against `xfbvrndsolancoscebjy.supabase.co` with the publishable key:
+**Live test** against `xfbvrndsolancoscebjy.supabase.co` with the publishable key, 2026-11-23 16:03 WIB:
 
-_Pending: added after `schema-v6-dashboard.sql` is run in production._
+```
+$ curl -X POST "$URL/rest/v1/rpc/weave_dashboard" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -d '{}'
+HTTP 200
+{"reporting": {"date": "2026-11-20", "expected": 23, "reported": 6, "rate_pct": 26.1, "target_pct": 90, "streak_days": 0},
+ "hours": {"week": 8, "month": 2033.5, "last_week": 105, "last_month": 2500, "week_change_pct": -92.4, "month_change_pct": -18.7},
+ "attendance": {"today": {"expected": 23, "clocked_in": 19, "still_in": 19, "not_clocked_in": 4, "is_stale": false, ...}, ...},
+ "top_projects_month": [{"code": "2260301", "hours": 736, ...}, ...], ...}
+
+$ curl "$URL/rest/v1/work_logs?select=*&limit=1" -H "apikey: $KEY" -H "Authorization: Bearer $KEY"
+{"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.work_logs TO anon;","message":"permission denied for table work_logs"}
+HTTP 401
+```
+
+The same key also gets `permission denied` (HTTP 401) on `profiles`, `projects`, `admin_settings`, `app_popups`, `attendance_days`, `admin_logs`, on inserting into `projects`, and on `rpc/is_admin`. The attendance sync's first run: `{"ok":true,"people":23,"dates":4,"rows":50,"failed":0}`.
