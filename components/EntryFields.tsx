@@ -5,8 +5,7 @@ import { Clock } from 'lucide-react';
 import { CATEGORY_LABEL, WORK_CATEGORIES, type EntryDraft, type Project, type RecentProject, type WorkCategory } from '@/lib/worklog';
 import type { TaskContext } from '@/lib/tasks';
 import { ProjectCombobox } from './ProjectCombobox';
-import { ProgressSteps } from './ProgressSteps';
-import { TaskPicker } from './TaskPicker';
+import { EntryTasks } from './EntryTasks';
 import { imagesFrom } from './ScreenshotStrip';
 
 // Fields for one work entry. The work-log form shows hours; timer items do not.
@@ -20,18 +19,17 @@ function autoGrow(el: HTMLTextAreaElement | null) {
 export function EntryFields({ t, entry, projects, recent, hasV4Schema, showHours = true, onChange: change, onPasteFiles, extra, taskCtx }: {
   t: any; entry: EntryDraft; projects: Project[]; recent?: RecentProject[]; hasV4Schema: boolean; showHours?: boolean;
   onChange: (patch: Partial<EntryDraft>) => void;
-  taskCtx?: TaskContext; // project tasks (schema v7); without it no task picker is shown
+  taskCtx?: TaskContext; // project tasks (schema v7 + v8); without it no tasks are offered
   onPasteFiles?: (files: File[]) => void; // e.g. Win+Shift+S then Ctrl+V anywhere in the row
   extra?: ReactNode;
 }) {
-  // A task belongs to one project: changing the project or category clears it and its proposed step.
+  // Tasks belong to one project: changing the project or category clears them.
   const onChange = (patch: Partial<EntryDraft>) => {
     const moved = (patch.project_id !== undefined && patch.project_id !== entry.project_id) || (patch.category !== undefined && patch.category !== entry.category);
-    change(moved ? { ...patch, task_id: '', progress: null } : patch);
+    change(moved ? { ...patch, tasks: [] } : patch);
   };
-  const task = taskCtx && entry.task_id ? taskCtx.tasks.find(x => x.id === entry.task_id) : undefined;
   const showTasks = Boolean(taskCtx && entry.category === 'project' && entry.project_id
-    && taskCtx.tasks.some(x => x.project_id === entry.project_id && (!x.archived_at || x.id === entry.task_id)));
+    && (entry.tasks.length > 0 || taskCtx.tasks.some(x => x.project_id === entry.project_id && !x.archived_at)));
   return (
     <div className="entry-row-fields" onPaste={onPasteFiles ? e => {
       const files = imagesFrom(e.clipboardData.files);
@@ -54,18 +52,14 @@ export function EntryFields({ t, entry, projects, recent, hasV4Schema, showHours
       )}
       {showTasks && taskCtx && (
         <div className="entry-field">
-          <label>{t.task}</label>
-          <TaskPicker t={t} tasks={taskCtx.tasks} projectId={entry.project_id} value={entry.task_id} preferred={taskCtx.preferred}
-            recentIds={taskCtx.recentIds} onChange={id => change({ task_id: id, progress: null })} />
-          {task && (
-            <ProgressSteps t={t} approved={task.progress} value={entry.progress}
-              label={`${t.progress}: ${task.wbs} ${task.name}`} onChange={progress => change({ progress })} />
-          )}
+          <label>{t.tasksWorked} <span className="label-optional">({t.optional})</span></label>
+          <EntryTasks t={t} ctx={taskCtx} projectId={entry.project_id} lineHours={entry.hours} value={entry.tasks}
+            onChange={tasks => change({ tasks })} />
         </div>
       )}
       {hasV4Schema && (
         <div className="entry-field">
-          <label>{t.deskripsi}{task ? <span className="label-optional"> ({t.optional})</span> : null}</label>
+          <label>{t.deskripsi}{entry.tasks.length ? <span className="label-optional"> ({t.optional})</span> : null}</label>
           <textarea className="field-input entry-description" rows={2} value={entry.description} ref={autoGrow}
             placeholder={entry.category === 'quotation' ? t.descQuotation : entry.category === 'training' ? t.descTraining : entry.category === 'other' ? t.descOther : ''}
             onChange={e => { autoGrow(e.target); onChange({ description: e.target.value }); }} />

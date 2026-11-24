@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { CATEGORY_LABEL, recentProjects, WORK_CATEGORIES, buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, previousWorkday, mergeSameProject, newEntryDraft, normalizeLogs, saveDay, saveLeaveDay, workLogToExistingEntry, type EntryInput } from './worklog';
+import { CATEGORY_LABEL, recentProjects, WORK_CATEGORIES, buildWorkLogInserts, draftToEntry, isDraftReady, groupLogsByProject, isLeaveDate, previousWorkday, mergeSameProject, newEntryDraft, normalizeLogs, saveDay, saveLeaveDay, workLogToExistingEntry, taskHoursIssue, type EntryInput } from './worklog';
 
 const entry = (patch: Partial<EntryInput>): EntryInput => ({
   category: 'project', project_id: null, custom_name: '', custom_code: '', description: '', hours: 1, ...patch,
@@ -39,7 +39,7 @@ describe('isDraftReady', () => {
 describe('draftToEntry', () => {
   it('converts hours to a number and empty project id to null', () => {
     expect(draftToEntry({ ...newEntryDraft(), custom_name: 'X', hours: '1.5' })).toEqual(
-      { ...entry({ custom_name: 'X', hours: 1.5 }), task_id: null },
+      { ...entry({ custom_name: 'X', hours: 1.5 }), tasks: [] },
     );
   });
 });
@@ -70,7 +70,7 @@ describe('workLogToExistingEntry', () => {
     const e = workLogToExistingEntry({
       id: '1', user_id: 'u', log_date: 'd', project_id: null, hours: 2, is_leave: false, category: 'quotation', description: 'Pabrik',
     });
-    expect(e).toEqual({ category: 'quotation', project_id: null, custom_name: '', custom_code: '', description: 'Pabrik', hours: 2, label: 'Quotation: Pabrik', code: '', task_id: null });
+    expect(e).toEqual({ category: 'quotation', project_id: null, custom_name: '', custom_code: '', description: 'Pabrik', hours: 2, label: 'Quotation: Pabrik', code: '', tasks: [] });
   });
   it('labels project rows with the project name and code', () => {
     const e = workLogToExistingEntry({
@@ -272,23 +272,34 @@ describe('recentProjects', () => {
   });
 });
 
-describe('project tasks on entries', () => {
+describe('tasks on a project entry', () => {
   const entry = (patch: Partial<EntryInput>): EntryInput => ({ category: 'project', project_id: 'p1', custom_name: '', custom_code: '', description: '', hours: 1, ...patch });
-  it('keeps two tasks of one project apart but merges the same task', () => {
+  it('keeps one line per project: tasks of two lines are combined, hours of the same task added', () => {
     const merged = mergeSameProject([
-      entry({ task_id: 't1', hours: 3, description: 'a' }), entry({ task_id: 't2', hours: 4 }),
-      entry({ task_id: 't1', hours: 1, description: 'b' }), entry({ hours: 2 }), entry({ task_id: null, hours: 1 }),
+      entry({ hours: 3, description: 'a', tasks: [{ task_id: 't1', hours: 2 }, { task_id: 't2', hours: null }] }),
+      entry({ hours: 4, description: 'b', tasks: [{ task_id: 't1', hours: 1 }, { task_id: 't3', hours: 4 }] }),
+      entry({ project_id: 'p2', hours: 1 }),
     ]);
-    expect(merged.map(e => [e.task_id ?? null, e.hours, e.description])).toEqual([['t1', 4, 'a\nb'], ['t2', 4, ''], [null, 3, '']]);
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toMatchObject({ hours: 7, description: 'a\nb', tasks: [{ task_id: 't1', hours: 3 }, { task_id: 't2', hours: null }, { task_id: 't3', hours: 4 }] });
   });
-  it('sends task_id only when the database has the column, and only for registered projects', () => {
-    const rows = [entry({ task_id: 't1' }), entry({ project_id: null, custom_name: 'X', task_id: 't9' }), entry({ category: 'training', project_id: null, task_id: 't9', description: 'x' })];
-    expect(buildWorkLogInserts('u', '2026-11-20', rows, true, true).map(r => (r as any).task_id)).toEqual(['t1', undefined, undefined]);
-    expect(buildWorkLogInserts('u', '2026-11-20', rows, true).every(r => !('task_id' in r))).toBe(true);
+  it('sends the task list only when the database has it, and only for registered projects', () => {
+    const rows = [entry({ tasks: [{ task_id: 't1', hours: null }] }), entry({ project_id: null, custom_name: 'X', tasks: [{ task_id: 't9', hours: null }] }), entry({})];
+    expect(buildWorkLogInserts('u', '2026-11-20', rows, true, true).map(r => (r as any).tasks)).toEqual([[{ task_id: 't1', hours: null }], undefined, []]);
+    expect(buildWorkLogInserts('u', '2026-11-20', rows, true).every(r => !('tasks' in r))).toBe(true);
   });
-  it('carries the task and proposed progress from a draft', () => {
-    const d = { ...newEntryDraft(), project_id: 'p1', query: 'x', task_id: 't1', progress: 0.5, hours: '2' };
-    expect(draftToEntry(d)).toMatchObject({ project_id: 'p1', task_id: 't1', hours: 2 });
-    expect(newEntryDraft()).toMatchObject({ task_id: '', progress: null });
+  it('turns draft tasks into entry tasks: empty hours become null, drafts start without tasks', () => {
+    const d = { ...newEntryDraft(), project_id: 'p1', query: 'x', hours: '6', tasks: [{ task_id: 't1', hours: '2.5', progress: 0.5 }, { task_id: 't2', hours: '', progress: null }] };
+    expect(draftToEntry(d).tasks).toEqual([{ task_id: 't1', hours: 2.5 }, { task_id: 't2', hours: null }]);
+    expect(draftToEntry({ ...d, category: 'training', description: 'x' }).tasks).toEqual([]);
+    expect(newEntryDraft().tasks).toEqual([]);
+  });
+  it('is not ready when task hours add up to more than the line, or one is not a number', () => {
+    const d = { ...newEntryDraft(), project_id: 'p1', query: 'x', hours: '3' };
+    expect(isDraftReady({ ...d, tasks: [{ task_id: 't1', hours: '2', progress: null }, { task_id: 't2', hours: '1', progress: null }] })).toBe(true);
+    expect(isDraftReady({ ...d, tasks: [{ task_id: 't1', hours: '2', progress: null }, { task_id: 't2', hours: '1.5', progress: null }] })).toBe(false);
+    expect(isDraftReady({ ...d, tasks: [{ task_id: 't1', hours: '-1', progress: null }] })).toBe(false);
+    expect(taskHoursIssue({ ...d, tasks: [{ task_id: 't1', hours: '4', progress: null }] })).toBe('over');
+    expect(taskHoursIssue({ ...d, tasks: [{ task_id: 't1', hours: '', progress: null }] })).toBeNull();
   });
 });

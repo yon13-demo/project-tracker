@@ -11,7 +11,7 @@ export type WorkLog = {
   project_id: string | null; hours: number | null; is_leave: boolean;
   custom_project_name?: string | null; custom_project_code?: string | null;
   category?: WorkCategory; description?: string | null;
-  task_id?: string | null;
+  tasks?: EntryTask[] | null;
   profiles?: { full_name: string };
   projects?: { name: string; project_code: string } | null;
 };
@@ -20,17 +20,30 @@ export function logProjectName(w: WorkLog) { return w.projects?.name || w.custom
 export function isManualProject(w: WorkLog) { return (w.category || 'project') === 'project' && !w.project_id; }
 export function logProjectCode(w: WorkLog) { return w.projects?.project_code || w.custom_project_code || ''; }
 
-// task_id: optional project task; progress: the step the user proposes for it (null = no change).
-export type EntryDraft = { tempId: string; category: WorkCategory; description: string; project_id: string; custom_name: string; custom_code: string; query: string; hours: string; task_id: string; progress: number | null };
+// Tasks worked on in a project line: hours per task are optional (empty = not split out), and `progress`
+// is the step the user proposes for the task (null = no change).
+export type EntryTask = { task_id: string; hours: number | null };
+export type EntryTaskDraft = { task_id: string; hours: string; progress: number | null };
+export type EntryDraft = { tempId: string; category: WorkCategory; description: string; project_id: string; custom_name: string; custom_code: string; query: string; hours: string; tasks: EntryTaskDraft[] };
 
 export function newEntryDraft(): EntryDraft {
-  return { tempId: crypto.randomUUID(), category: 'project', description: '', project_id: '', custom_name: '', custom_code: '', query: '', hours: '', task_id: '', progress: null };
+  return { tempId: crypto.randomUUID(), category: 'project', description: '', project_id: '', custom_name: '', custom_code: '', query: '', hours: '', tasks: [] };
 }
 
 export type EntryInput = {
   category: WorkCategory; project_id: string | null; custom_name: string; custom_code: string; description: string; hours: number;
-  task_id?: string | null;
+  tasks?: EntryTask[];
 };
+
+const taskHoursOf = (d: EntryDraft) => d.tasks.filter(x => x.hours.trim() !== '').map(x => Number(x.hours));
+
+// Task hours are optional; when given they must be numbers ≥ 0 that together fit in the line's hours.
+export function taskHoursIssue(d: EntryDraft): 'invalid' | 'over' | null {
+  const hours = taskHoursOf(d);
+  if (hours.some(h => isNaN(h) || h < 0)) return 'invalid';
+  const total = Number(d.hours) || 0;
+  return hours.reduce((a, b) => a + b, 0) > total + 1e-9 ? 'over' : null;
+}
 
 export function isDraftReady(d: EntryDraft, opts: { requireHours?: boolean } = {}): boolean {
   // Lainnya is free-form, so its description is what says what the work was.
@@ -39,18 +52,20 @@ export function isDraftReady(d: EntryDraft, opts: { requireHours?: boolean } = {
   if (!hasTarget) return false;
   if (opts.requireHours === false) return true;
   const hours = Number(d.hours);
-  return d.hours !== '' && !isNaN(hours) && hours > 0;
+  return d.hours !== '' && !isNaN(hours) && hours > 0 && !taskHoursIssue(d);
 }
 
 export function draftToEntry(d: EntryDraft): EntryInput {
   return {
     category: d.category, project_id: d.project_id || null, custom_name: d.custom_name,
     custom_code: d.custom_code, description: d.description, hours: Number(d.hours),
-    task_id: d.category === 'project' && d.project_id && d.task_id ? d.task_id : null,
+    tasks: d.category === 'project' && d.project_id
+      ? d.tasks.filter(x => x.task_id).map(x => ({ task_id: x.task_id, hours: x.hours.trim() === '' ? null : Number(x.hours) }))
+      : [],
   };
 }
 
-// `hasTasks`: the database has work_logs.task_id (schema v7); older databases must not be sent the column.
+// `hasTasks`: the database has work_logs.tasks (schema v8); older databases must not be sent the column.
 export function buildWorkLogInserts(userId: string, date: string, entries: EntryInput[], hasV4Schema: boolean, hasTasks = false) {
   return entries.map(e => ({
     user_id: userId, log_date: date, hours: e.hours, is_leave: false,
@@ -58,20 +73,26 @@ export function buildWorkLogInserts(userId: string, date: string, entries: Entry
     ...(e.category !== 'project'
       ? { project_id: null }
       : e.project_id
-        ? { project_id: e.project_id, ...(hasTasks ? { task_id: e.task_id || null } : {}) }
+        ? { project_id: e.project_id, ...(hasTasks ? { tasks: e.tasks ?? [] } : {}) }
         : { project_id: null, custom_project_name: e.custom_name.trim(), custom_project_code: e.custom_code.trim() || null }),
   }));
 }
 
-// work_logs is unique per (user, date, project) — per (user, date, task) when a task is given.
+// work_logs is unique per (user, date, project): one line per project per day, its tasks combined.
 export function mergeSameProject(entries: EntryInput[]): EntryInput[] {
   const merged: EntryInput[] = [];
   for (const e of entries) {
     const same = e.category === 'project' && e.project_id
-      ? merged.find(m => m.category === 'project' && m.project_id === e.project_id && (m.task_id || null) === (e.task_id || null))
+      ? merged.find(m => m.category === 'project' && m.project_id === e.project_id)
       : undefined;
-    if (!same) { merged.push({ ...e }); continue; }
+    if (!same) { merged.push(e.tasks ? { ...e, tasks: e.tasks.map(x => ({ ...x })) } : { ...e }); continue; }
     same.hours += e.hours;
+    if (e.tasks?.length) same.tasks ??= [];
+    for (const x of e.tasks ?? []) {
+      const had = same.tasks!.find(y => y.task_id === x.task_id);
+      if (!had) same.tasks!.push({ ...x });
+      else if (x.hours != null) had.hours = (had.hours ?? 0) + x.hours;
+    }
     same.description = [same.description.trim(), e.description.trim()].filter(Boolean).join('\n');
   }
   return merged;
@@ -80,7 +101,7 @@ export function mergeSameProject(entries: EntryInput[]): EntryInput[] {
 // Columns the app reads for a work log, with the joined user name and project.
 export const LOG_COLUMNS = 'id,user_id,log_date,project_id,hours,is_leave,profiles(full_name),projects(name,project_code)';
 export const LOG_COLUMNS_V4 = `${LOG_COLUMNS},custom_project_name,custom_project_code,category,description`;
-export const LOG_COLUMNS_V7 = `${LOG_COLUMNS_V4},task_id`;
+export const LOG_COLUMNS_TASKS = `${LOG_COLUMNS_V4},tasks`;
 
 // PostgREST can return a joined row as a one-item array; the UI expects an object.
 export function normalizeLogs(rows: unknown[] | null | undefined): WorkLog[] {
@@ -100,7 +121,7 @@ async function replaceDay(client: SupabaseClient, userId: string, date: string, 
   const removed = await client.from('work_logs').delete().eq('user_id', userId).eq('log_date', date).select('*');
   if (removed.error) return { error: removed.error.message, rows: [] };
   if (!rows.length) return { error: null, rows: [] };
-  const inserted = await client.from('work_logs').insert(rows).select(hasTasks ? LOG_COLUMNS_V7 : hasV4Schema ? LOG_COLUMNS_V4 : LOG_COLUMNS);
+  const inserted = await client.from('work_logs').insert(rows).select(hasTasks ? LOG_COLUMNS_TASKS : hasV4Schema ? LOG_COLUMNS_V4 : LOG_COLUMNS);
   if (!inserted.error) return { error: null, rows: normalizeLogs(inserted.data) };
   const previous = (removed.data ?? []).map(({ profiles: _p, projects: _j, ...row }: Record<string, unknown>) => row);
   if (previous.length) await client.from('work_logs').insert(previous);
@@ -131,7 +152,7 @@ export function workLogToExistingEntry(w: WorkLog): ExistingEntry {
     : description ? `${CATEGORY_LABEL[category]}: ${description}` : CATEGORY_LABEL[category];
   return {
     category, project_id: w.project_id, custom_name: w.custom_project_name || '', custom_code: w.custom_project_code || '',
-    description, hours: w.hours || 0, label, code: logProjectCode(w), task_id: w.task_id ?? null,
+    description, hours: w.hours || 0, label, code: logProjectCode(w), tasks: w.tasks ?? [],
   };
 }
 

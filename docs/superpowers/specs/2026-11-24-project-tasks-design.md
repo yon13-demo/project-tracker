@@ -199,3 +199,13 @@ The attendance `employees.department` values are: Workshop, Process, Automation,
 - **Day timer:** the timer has no task picker yet, so timer entries save without a task.
 - **Import:** `scripts/import_followup_xlsx.py` (Python/openpyxl, not Node). It numbers tasks by position, because Excel stores "2.10" as 2.1.
 - **Checked against the 2260301 workbook:** Mechanical 96.7% and Electrical & Automation 74.2% match. Process is 72% vs Excel's 76%, because Excel's Item Specification formula leaves out task 5.4 "Data Sheet".
+
+## Change (2026-11-24, schema v8): several tasks on one project line
+
+- **One line per project per day again.** Its tasks are a list, `work_logs.tasks = [{task_id, hours}]`.
+- **Hours per task are optional.** When given, they may not add up to more than the line's hours. The database trigger and the form both check this.
+- **Progress:** each task on the line has its own 0–100% row and proposal.
+- **v7 rows are folded in:** one row per task becomes one line per project and day, with hours summed, descriptions joined and task hours kept. A v7 app that still sends `task_id` has it moved into the list.
+- **Deleting a task with hours on it** is refused by a trigger. Archive it instead.
+- **Screenshot keys** are per project line again (`p-<project>`).
+- **Division:** the sync fills `profiles.division` only when it's empty, so changes made by hand are kept.
