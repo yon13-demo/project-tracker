@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, MonitorPlay } from 'lucide-react';
 import { monthTotals } from '@/lib/hoursStats';
 import type { WorkLog } from '@/lib/worklog';
 import { HoursInsights } from './HoursInsights';
@@ -44,9 +44,12 @@ export function HoursHero({ t, lang, logs, totalHours, projectCount, peopleCount
           </div>
         )}
       </div>
-      <button type="button" className={`hero-expand${open ? ' open' : ''}`} onClick={() => setOpen(v => !v)} aria-expanded={open}>
-        {open ? t.hideDetails : t.showDetails}<ChevronDown size={15} aria-hidden />
-      </button>
+      <div className="hero-actions">
+        <button type="button" className={`hero-expand${open ? ' open' : ''}`} onClick={() => setOpen(v => !v)} aria-expanded={open}>
+          {open ? t.hideDetails : t.showDetails}<ChevronDown size={15} aria-hidden />
+        </button>
+        <a className="hero-dash-link" href="/dashboard" target="_blank" rel="noopener">{t.openDashboard}<MonitorPlay size={15} aria-hidden /></a>
+      </div>
       {open && <div className="hero-details"><HoursInsights t={t} lang={lang} logs={logs} /></div>}
     </section>
   );

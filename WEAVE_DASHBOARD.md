@@ -328,3 +328,20 @@ HTTP 401
 ```
 
 The same key also gets `permission denied` (HTTP 401) on `profiles`, `projects`, `admin_settings`, `app_popups`, `attendance_days`, `admin_logs`, on inserting into `projects`, and on `rpc/is_admin`. The attendance sync's first run: `{"ok":true,"people":23,"dates":4,"rows":50,"failed":0}`.
+
+## 11. Project progress (schema v9)
+
+Since `schema-v9-dashboard-progress.sql`, the response also has `project_progress`: up to 6 active projects that have a task list, busiest this month first. It's an empty array when no project has tasks, and it's missing before v9 is run (the page then shows a hint).
+
+| Field | Meaning | Unit | `null` means |
+|---|---|---|---|
+| `code`, `name` | Project number and name | text | never null |
+| `overall` | Average of the disciplines' progress (approved steps only) | %, 1 dp | the project has no live tasks |
+| `disciplines[]` | `key`, `label`, `progress_pct`, `tasks` (leaf tasks), `done` (tasks at 100%), in the order Process, Mechanical, Electrical & Automation, … | %, count | never null |
+| `tasks_total`, `tasks_done` | Leaf tasks, and how many are at 100% | count | never null |
+| `pending` | Progress proposals waiting for the PM | count | never null |
+| `hours_month` | Hours logged on the project this month | hours | never null |
+
+**Formula:** a task group's progress is the weighted average of its non-archived children (no weight = 1). A discipline is the weighted average of its deliverables. The project is the plain average of its disciplines. It's the same maths as the app (`lib/tasks.ts`).
+
+**Built page:** `/dashboard` (`app/dashboard/page.tsx`). Dark by default; add `?theme=light` for a light screen, or `?date=YYYY-MM-DD` to show a past day.
