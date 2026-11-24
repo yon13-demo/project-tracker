@@ -12,8 +12,8 @@ import { supabase } from '@/lib/supabase';
 import { showAlert, showStatus, registerNotifiers } from '@/lib/notify';
 import {
   CATEGORY_LABEL, draftToEntry, groupLogsByProject, isDraftReady, isManualProject, logProjectCode, logProjectName, newEntryDraft, saveDay,
-  type EntryDraft, type Project, type WorkCategory, type WorkLog,
-  LOG_COLUMNS, LOG_COLUMNS_V4, LOG_COLUMNS_V7, normalizeLogs, previousWorkday, recentProjects, saveLeaveDay,
+  type EntryDraft, type EntryTask, type Project, type WorkCategory, type WorkLog,
+  LOG_COLUMNS, LOG_COLUMNS_V4, LOG_COLUMNS_TASKS, normalizeLogs, taskHoursIssue, previousWorkday, recentProjects, saveLeaveDay,
 } from '@/lib/worklog';
 import { EntryFields } from '@/components/EntryFields';
 import { DayTimerPanel } from '@/components/DayTimerPanel';
@@ -36,7 +36,7 @@ import { projectProgress, type TaskContext } from '@/lib/tasks';
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Lang = 'id' | 'en';
 type Profile = { id: string; full_name: string; role: 'admin' | 'user'; email?: string; dev_access?: boolean; dev_role?: string | null };
-type DayEntry = { project_id: string | null; project_name: string; project_code: string; hours: number; manual: boolean; category: WorkCategory; description: string; task_id: string | null };
+type DayEntry = { project_id: string | null; project_name: string; project_code: string; hours: number; manual: boolean; category: WorkCategory; description: string; tasks: EntryTask[] };
 type AdminLog = {
   id: string; action: string; details: any; created_at: string;
   admin?: { full_name: string } | null;
@@ -98,6 +98,8 @@ const text = {
     task: 'Tugas', noTask: 'Tanpa tugas', recentTasks: 'Terakhir dipakai', archived: 'diarsipkan', optional: 'opsional',
     progressReview: 'Persetujuan progres', pendingCount: 'menunggu', progressReviewNote: 'Progres yang diusulkan engineer saat mencatat jam. Hanya progres yang disetujui yang dihitung.', approveAll: 'Setujui semua', approve: 'Setujui', reject: 'Tolak', rejectReason: 'Alasan menolak (opsional):', reviewApproved: '{n} progres disetujui.', reviewRejected: '{n} progres ditolak.',
     tasksTitle: 'Tugas', tasksNote: 'Daftar tugas per disiplin. Engineer memilih tugas saat mencatat jam dan mengusulkan progresnya; progres yang Anda atur di sini langsung disetujui.', showArchived: 'Tampilkan arsip', noTasksYet: 'belum ada tugas', addDeliverable: 'Deliverable', addTask: 'Tambah tugas', editTask: 'Ubah tugas', wbs: 'No.', taskName: 'Nama', docType: 'Dokumen', weight: 'Bobot', weightEqual: 'sama rata', moveUp: 'Naik', moveDown: 'Turun', archive: 'Arsipkan', restore: 'Pulihkan', deleteTaskConfirm: 'Hapus {name}?',
+    tasksWorked: 'Tugas yang dikerjakan', addTaskToEntry: '+ Pilih tugas…', addAnotherTask: '+ Tambah tugas lain…', removeTask: 'Hapus tugas', taskHours: 'Jam tugas',
+    taskHoursSum: 'Rincian jam: {sum} dari {total} jam · {rest} jam tanpa rincian', taskHoursOver: 'Rincian jam {sum} lebih dari {total} jam di baris ini', taskHoursOverAlert: 'Jumlah jam per tugas lebih dari jam proyeknya. Kurangi rincian jam tugas atau tambah jam proyek.', taskHoursInvalid: 'Jam tugas harus angka 0 atau lebih.', unsplit: 'tanpa rincian',
     jenis: 'Jenis', kerja: 'Kerja', close: 'Tutup', manual: 'Manual', logged: 'Tercatat',
     useManual: 'Gunakan', noProjectMatch: 'Proyek tidak ditemukan',
     replaceHint: 'Tanggal ini sudah tercatat. Menyimpan akan mengganti pencatatan sebelumnya.', noLogs: 'Belum ada pencatatan',
@@ -173,6 +175,8 @@ const text = {
     task: 'Task', noTask: 'No task', recentTasks: 'Recently used', archived: 'archived', optional: 'optional',
     progressReview: 'Progress approval', pendingCount: 'pending', progressReviewNote: 'Progress engineers proposed while logging hours. Only approved progress counts.', approveAll: 'Approve all', approve: 'Approve', reject: 'Reject', rejectReason: 'Reason for rejecting (optional):', reviewApproved: '{n} progress approved.', reviewRejected: '{n} progress rejected.',
     tasksTitle: 'Tasks', tasksNote: 'Task list per discipline. Engineers pick a task when logging hours and propose its progress; progress you set here is approved right away.', showArchived: 'Show archived', noTasksYet: 'no tasks yet', addDeliverable: 'Deliverable', addTask: 'Add task', editTask: 'Edit task', wbs: 'No.', taskName: 'Name', docType: 'Document', weight: 'Weight', weightEqual: 'equal', moveUp: 'Move up', moveDown: 'Move down', archive: 'Archive', restore: 'Restore', deleteTaskConfirm: 'Delete {name}?',
+    tasksWorked: 'Tasks worked on', addTaskToEntry: '+ Pick a task…', addAnotherTask: '+ Add another task…', removeTask: 'Remove task', taskHours: 'Task hours',
+    taskHoursSum: 'Split: {sum} of {total} h · {rest} h not split', taskHoursOver: 'Task hours {sum} are more than the {total} h of this line', taskHoursOverAlert: 'Task hours add up to more than the project hours. Lower the task hours or raise the project hours.', taskHoursInvalid: 'Task hours must be a number, 0 or more.', unsplit: 'not split',
     jenis: 'Type', kerja: 'Work', close: 'Close', manual: 'Manual', logged: 'Logged',
     useManual: 'Use', noProjectMatch: 'No matching project',
     replaceHint: 'This date already has entries. Saving will replace them.', noLogs: 'No entries yet',
@@ -376,8 +380,8 @@ export default function Home() {
 
     const loadLogs = async () => {
       // These columns exist only after supabase/schema-v4-worklog-entries.sql has been run.
-      // task_id exists only after schema-v7-project-tasks.sql.
-      const withTasks = await supabase.from('work_logs').select(LOG_COLUMNS_V7).order('log_date', { ascending: false });
+      // work_logs.tasks exists only after schema-v8-entry-tasks.sql.
+      const withTasks = await supabase.from('work_logs').select(LOG_COLUMNS_TASKS).order('log_date', { ascending: false });
       if (!withTasks.error) { setHasV4Schema(true); return withTasks; }
       const withManual = await supabase.from('work_logs').select(LOG_COLUMNS_V4).order('log_date', { ascending: false });
       setHasV4Schema(!withManual.error);
@@ -994,7 +998,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
           manual: isManualProject(wl),
           category: wl.category || 'project',
           description: wl.description || '',
-          task_id: wl.task_id ?? null
+          tasks: wl.tasks ?? []
         });
       }
     }
@@ -1011,7 +1015,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
   // Tasks offered on project entries: the person's own discipline first, then their recently logged tasks.
   const taskCtx = useMemo<TaskContext | undefined>(() => {
     if (!tasksApi.enabled) return undefined;
-    const recentIds = [...new Set([...workLogs].sort((a, b) => b.log_date.localeCompare(a.log_date)).map(w => w.task_id).filter((id): id is string => Boolean(id)))].slice(0, 5);
+    const recentIds = [...new Set([...workLogs].sort((a, b) => b.log_date.localeCompare(a.log_date)).flatMap(w => (w.tasks ?? []).map(x => x.task_id)))].slice(0, 5);
     return { tasks: tasksApi.tasks, preferred: tasksApi.preferred, recentIds };
   }, [tasksApi.enabled, tasksApi.tasks, tasksApi.preferred, workLogs]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
@@ -1028,7 +1032,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
     [logsByDate, formOpen, selectedDate], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const shotsApi = useScreenshots(shotDates, showAlert, t.maxScreenshots);
-  const keyOfEntry = (e: DayEntry) => entryKey({ category: e.category, project_id: e.project_id, custom_name: e.manual ? e.project_name : '', description: e.description, task_id: e.task_id });
+  const keyOfEntry = (e: DayEntry) => entryKey({ category: e.category, project_id: e.project_id, custom_name: e.manual ? e.project_name : '', description: e.description });
 
   // After "Tambah Proyek", bring the new row into view and put the cursor in its project field.
   useEffect(() => {
@@ -1059,9 +1063,11 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
       custom_code: e.manual ? e.project_code : '',
       query: e.category !== 'project' ? '' : e.manual ? e.project_name : `${e.project_name} — ${e.project_code}`,
       hours: String(e.hours),
-      task_id: e.task_id || '',
-      // A step proposed earlier for this task and day, still waiting for approval, shows as chosen again.
-      progress: e.task_id ? tasksApi.proposals.find(p => p.user_id === profile.id && p.log_date === date && p.task_id === e.task_id && p.status === 'pending')?.to_progress ?? null : null,
+      // A step proposed earlier for a task on that day, still waiting for approval, shows as chosen again.
+      tasks: e.tasks.map(x => ({
+        task_id: x.task_id, hours: x.hours == null ? '' : String(x.hours),
+        progress: tasksApi.proposals.find(p => p.user_id === profile.id && p.log_date === date && p.task_id === x.task_id && p.status === 'pending')?.to_progress ?? null,
+      })),
     }));
     setDateEntries(entries.length ? entries : [newEntryDraft()]);
     setSelectedDate(date);
@@ -1112,14 +1118,14 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
     if (isLeaveMode) return handleMarkLeave();
     for (const e of dateEntries) {
       if (!isDraftReady(e, { requireHours: false })) { showAlert(e.category === 'other' ? t.needDescOther : lang === 'id' ? 'Pilih proyek terlebih dahulu.' : 'Please select a project.'); return; }
+      if (taskHoursIssue(e)) { showAlert(taskHoursIssue(e) === 'over' ? t.taskHoursOverAlert : t.taskHoursInvalid); return; }
       if (!isDraftReady(e)) { showAlert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return; }
     }
     setSaving(true);
     const saved = await saveDay(supabase, profile.id, selectedDate, dateEntries.map(draftToEntry), hasV4Schema, tasksApi.enabled);
     if (!saved.error) {
-      const proposalError = await tasksApi.saveDayProposals(selectedDate, dateEntries.map(e => ({
-        task_id: e.category === 'project' && e.project_id && e.task_id ? e.task_id : null, progress: e.progress, description: e.description,
-      })));
+      const proposalError = await tasksApi.saveDayProposals(selectedDate, dateEntries.flatMap(e =>
+        e.category === 'project' && e.project_id ? e.tasks.map(x => ({ task_id: x.task_id, progress: x.progress, description: e.description })) : []));
       if (proposalError) showAlert(proposalError);
     }
     setSaving(false);
@@ -1346,7 +1352,7 @@ function AdminView({
     for (const p of tasks.proposals) if (p.status === 'pending') m.set(p.task_id, (m.get(p.task_id) ?? 0) + 1);
     return m;
   }, [tasks.proposals]);
-  const loggedTaskIds = useMemo(() => new Set((workLogs as WorkLog[]).map(w => w.task_id).filter((id): id is string => Boolean(id))), [workLogs]);
+  const loggedTaskIds = useMemo(() => new Set((workLogs as WorkLog[]).flatMap(w => (w.tasks ?? []).map(x => x.task_id))), [workLogs]);
   const totalHours = workLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
   const manualGroups = useMemo(() => manualProjectGroups(workLogs, projects), [workLogs, projects]);
   const exportMonths = getExportMonths();

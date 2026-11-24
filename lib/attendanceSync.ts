@@ -39,7 +39,7 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
   return out;
 }
 
-// Departments to write to profiles.division: only where the attendance system sent one and it differs.
+// Departments to write to profiles.division: only where none is set yet, so an admin's own change sticks.
 export function divisionUpdates(found: Map<string, string | null>, current: Map<string, string | null>): { id: string; division: string }[] {
-  return [...found].filter(([id, d]) => d && d !== (current.get(id) ?? null)).map(([id, d]) => ({ id, division: d! }));
+  return [...found].filter(([id, d]) => d && !current.get(id)).map(([id, d]) => ({ id, division: d! }));
 }

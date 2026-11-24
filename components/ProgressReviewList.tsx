@@ -28,9 +28,12 @@ export function ProgressReviewList({ t, lang, proposals, tasks, projects, userNa
     for (let x = taskById.get(task.parent_id ?? ''); x; x = taskById.get(x.parent_id ?? '')) names.unshift(x.name);
     return names.join(' › ');
   };
-  const hoursOn = (p: ProgressProposal) => workLogs
-    .filter(w => w.user_id === p.user_id && w.log_date === p.log_date && w.task_id === p.task_id)
-    .reduce((s, w) => s + (w.hours || 0), 0);
+  // Hours that person gave this task that day: its own split if given, otherwise null (only the project line's hours).
+  const hoursOn = (p: ProgressProposal): number | null => {
+    const item = workLogs.filter(w => w.user_id === p.user_id && w.log_date === p.log_date)
+      .flatMap(w => w.tasks ?? []).find(x => x.task_id === p.task_id);
+    return item?.hours ?? null;
+  };
   const fmtDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short' });
 
   async function review(key: string, ids: string[], approve: boolean) {
@@ -80,7 +83,7 @@ export function ProgressReviewList({ t, lang, proposals, tasks, projects, userNa
                         </td>
                         <td>
                           <div className="list-main">{userName(p.user_id)}</div>
-                          <div className="list-sub">{fmtDate(p.log_date)}{h ? ` · ${h} ${t.hoursUnit}` : ''}</div>
+                          <div className="list-sub">{fmtDate(p.log_date)} · {h != null ? `${h} ${t.hoursUnit}` : t.unsplit}</div>
                         </td>
                         <td className="col-actions">
                           <div className="list-actions">

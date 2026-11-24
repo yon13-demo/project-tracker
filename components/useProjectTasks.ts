@@ -11,7 +11,7 @@ import type { TaskDraft } from './ProjectTasksPanel';
 
 export type TasksApi = ReturnType<typeof useProjectTasks>;
 
-// Project tasks and progress proposals (schema v7). `enabled` stays false until the migration is run,
+// Project tasks and progress proposals (schema v7 + v8). `enabled` stays false until both are run,
 // so the app keeps working without it.
 export function useProjectTasks(userId: string | null, isAdmin: boolean, t: any) {
   const [enabled, setEnabled] = useState(false);
@@ -33,12 +33,14 @@ export function useProjectTasks(userId: string | null, isAdmin: boolean, t: any)
 
   const reload = useCallback(async () => {
     if (!userId) return;
-    const [res, prof] = await Promise.all([
+    // Needs both schema v7 (project_tasks) and v8 (work_logs.tasks).
+    const [res, prof, cols] = await Promise.all([
       supabase.from('project_tasks').select(TASK_COLUMNS),
       supabase.from('profiles').select('division').eq('id', userId).maybeSingle(),
+      supabase.from('work_logs').select('tasks').limit(1),
     ]);
-    setEnabled(!res.error);
-    if (res.error) return;
+    setEnabled(!res.error && !cols.error);
+    if (res.error || cols.error) return;
     setTasks(normalizeTasks(res.data));
     setPreferred(divisionToDiscipline((prof.data as { division?: string } | null)?.division));
     await loadProposals();

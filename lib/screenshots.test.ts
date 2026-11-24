@@ -129,12 +129,9 @@ describe('screenshot storage', () => {
   });
 });
 
-describe('entryKey with a task', () => {
-  it('gives a task entry its own folder and leaves entries without a task unchanged', () => {
+describe('entryKey with tasks', () => {
+  it('keeps one folder per project line, whatever tasks it has', () => {
     const base = { category: 'project' as const, project_id: '8f0c1d2e-0000-4000-8000-000000000001', custom_name: '', description: '' };
     expect(entryKey(base)).toBe('p-8f0c1d2e-0000-4000-8000-000000000001');
-    const k = entryKey({ ...base, task_id: 'ab12cd34-5678-4000-8000-000000000009' });
-    expect(k).toBe('p-8f0c1d2e-0000-4000-8000-000000000001-ab12cd34');
-    expect(k.length).toBeLessThanOrEqual(60);
   });
 });
