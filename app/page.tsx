@@ -13,7 +13,7 @@ import { showAlert, showStatus, registerNotifiers } from '@/lib/notify';
 import {
   CATEGORY_LABEL, draftToEntry, groupLogsByProject, isDraftReady, isManualProject, logProjectCode, logProjectName, newEntryDraft, saveDay,
   type EntryDraft, type Project, type WorkCategory, type WorkLog,
-  LOG_COLUMNS, LOG_COLUMNS_V4, normalizeLogs, previousWorkday, recentProjects, saveLeaveDay,
+  LOG_COLUMNS, LOG_COLUMNS_V4, LOG_COLUMNS_V7, normalizeLogs, previousWorkday, recentProjects, saveLeaveDay,
 } from '@/lib/worklog';
 import { EntryFields } from '@/components/EntryFields';
 import { DayTimerPanel } from '@/components/DayTimerPanel';
@@ -28,11 +28,15 @@ import { manualProjectGroups } from '@/lib/manualMerge';
 import { HoursHero } from '@/components/HoursHero';
 import { useScreenshots } from '@/components/useScreenshots';
 import { entryKey } from '@/lib/screenshots';
+import { useProjectTasks, type TasksApi } from '@/components/useProjectTasks';
+import { ProgressReviewList } from '@/components/ProgressReviewList';
+import { ProjectTasksPanel } from '@/components/ProjectTasksPanel';
+import { projectProgress, type TaskContext } from '@/lib/tasks';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Lang = 'id' | 'en';
 type Profile = { id: string; full_name: string; role: 'admin' | 'user'; email?: string; dev_access?: boolean; dev_role?: string | null };
-type DayEntry = { project_id: string | null; project_name: string; project_code: string; hours: number; manual: boolean; category: WorkCategory; description: string };
+type DayEntry = { project_id: string | null; project_name: string; project_code: string; hours: number; manual: boolean; category: WorkCategory; description: string; task_id: string | null };
 type AdminLog = {
   id: string; action: string; details: any; created_at: string;
   admin?: { full_name: string } | null;
@@ -90,6 +94,10 @@ const text = {
     passwordTooShort: 'Password minimal 6 karakter.', passwordChanged: 'Password berhasil diubah.',
     switchToEmployee: 'Karyawan', switchToAdmin: 'Admin',
     logWork: 'Catat jam kerja', logWorkSub: 'Proyek & jam per tanggal', myLogs: 'Pencatatan saya',
+    step0: 'Belum', step1: 'Mulai', step2: 'Setengah', step3: 'Hampir', step4: 'Selesai', progress: 'Progres', progressApproved: 'Disetujui:', progressDown: 'turun', pendingReview: 'menunggu persetujuan',
+    task: 'Tugas', noTask: 'Tanpa tugas', recentTasks: 'Terakhir dipakai', archived: 'diarsipkan', optional: 'opsional',
+    progressReview: 'Persetujuan progres', pendingCount: 'menunggu', progressReviewNote: 'Progres yang diusulkan engineer saat mencatat jam. Hanya progres yang disetujui yang dihitung.', approveAll: 'Setujui semua', approve: 'Setujui', reject: 'Tolak', rejectReason: 'Alasan menolak (opsional):', reviewApproved: '{n} progres disetujui.', reviewRejected: '{n} progres ditolak.',
+    tasksTitle: 'Tugas', tasksNote: 'Daftar tugas per disiplin. Engineer memilih tugas saat mencatat jam dan mengusulkan progresnya; progres yang Anda atur di sini langsung disetujui.', showArchived: 'Tampilkan arsip', noTasksYet: 'belum ada tugas', addDeliverable: 'Deliverable', addTask: 'Tambah tugas', editTask: 'Ubah tugas', wbs: 'No.', taskName: 'Nama', docType: 'Dokumen', weight: 'Bobot', weightEqual: 'sama rata', moveUp: 'Naik', moveDown: 'Turun', archive: 'Arsipkan', restore: 'Pulihkan', deleteTaskConfirm: 'Hapus {name}?',
     jenis: 'Jenis', kerja: 'Kerja', close: 'Tutup', manual: 'Manual', logged: 'Tercatat',
     useManual: 'Gunakan', noProjectMatch: 'Proyek tidak ditemukan',
     replaceHint: 'Tanggal ini sudah tercatat. Menyimpan akan mengganti pencatatan sebelumnya.', noLogs: 'Belum ada pencatatan',
@@ -161,6 +169,10 @@ const text = {
     switchToEmployee: 'Employee', switchToAdmin: 'Admin',
     support: 'Support',
     logWork: 'Log work hours', logWorkSub: 'Projects & hours per date', myLogs: 'My entries',
+    step0: 'Not started', step1: 'Started', step2: 'Mid progress', step3: 'Near completion', step4: 'Completed', progress: 'Progress', progressApproved: 'Approved:', progressDown: 'down', pendingReview: 'waiting for approval',
+    task: 'Task', noTask: 'No task', recentTasks: 'Recently used', archived: 'archived', optional: 'optional',
+    progressReview: 'Progress approval', pendingCount: 'pending', progressReviewNote: 'Progress engineers proposed while logging hours. Only approved progress counts.', approveAll: 'Approve all', approve: 'Approve', reject: 'Reject', rejectReason: 'Reason for rejecting (optional):', reviewApproved: '{n} progress approved.', reviewRejected: '{n} progress rejected.',
+    tasksTitle: 'Tasks', tasksNote: 'Task list per discipline. Engineers pick a task when logging hours and propose its progress; progress you set here is approved right away.', showArchived: 'Show archived', noTasksYet: 'no tasks yet', addDeliverable: 'Deliverable', addTask: 'Add task', editTask: 'Edit task', wbs: 'No.', taskName: 'Name', docType: 'Document', weight: 'Weight', weightEqual: 'equal', moveUp: 'Move up', moveDown: 'Move down', archive: 'Archive', restore: 'Restore', deleteTaskConfirm: 'Delete {name}?',
     jenis: 'Type', kerja: 'Work', close: 'Close', manual: 'Manual', logged: 'Logged',
     useManual: 'Use', noProjectMatch: 'No matching project',
     replaceHint: 'This date already has entries. Saving will replace them.', noLogs: 'No entries yet',
@@ -270,6 +282,7 @@ export default function Home() {
   const [authMode, setAuthMode] = useState<'in' | 'up'>('in');
   const [adminSettings, setAdminSettings] = useState<AdminSettings>({ allow_signup: true, login_domain: 'company.com', use_domain_login: true, login_method: 'both', maintenance_mode: false, main_domain: '' });
   const [adminMode, setAdminMode] = useState<'user' | 'admin'>('user');
+  const tasksApi = useProjectTasks(profile?.id ?? null, profile?.role === 'admin' || Boolean(profile?.dev_access), t);
 
   // Admin modals
   const [createOpen, setCreateOpen] = useState(false);
@@ -363,6 +376,9 @@ export default function Home() {
 
     const loadLogs = async () => {
       // These columns exist only after supabase/schema-v4-worklog-entries.sql has been run.
+      // task_id exists only after schema-v7-project-tasks.sql.
+      const withTasks = await supabase.from('work_logs').select(LOG_COLUMNS_V7).order('log_date', { ascending: false });
+      if (!withTasks.error) { setHasV4Schema(true); return withTasks; }
       const withManual = await supabase.from('work_logs').select(LOG_COLUMNS_V4).order('log_date', { ascending: false });
       setHasV4Schema(!withManual.error);
       if (!withManual.error) return withManual;
@@ -703,11 +719,11 @@ export default function Home() {
           showAdminLogs={showAdminLogs} setShowAdminLogs={setShowAdminLogs}
           showAdminSettings={showAdminSettings} setShowAdminSettings={setShowAdminSettings}
           adminSettings={adminSettings} onSaveSettings={saveSettings}
-          currentProfile={profile}
+          currentProfile={profile} tasksApi={tasksApi}
         />
       ) : (
         <UserView t={t} lang={lang} profile={profile} projects={visibleProjects} workLogs={workLogs.filter(w => w.user_id === profile.id)} logsLoaded={logsLoaded} hasV4Schema={hasV4Schema}
-          onDayChanged={(date, rows) => applyDay(profile.id, date, rows)} />
+          tasksApi={tasksApi} onDayChanged={(date, rows) => applyDay(profile.id, date, rows)} />
       )}
 
       {changePassOpen && <ChangePasswordModal t={t} lang={lang} onClose={() => setChangePassOpen(false)} />}
@@ -958,8 +974,8 @@ function formatCardDate(dateStr: string, lang: Lang): string {
   return formatted;
 }
 
-function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schema, onDayChanged }: {
-  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; logsLoaded: boolean; hasV4Schema: boolean; onDayChanged: (date: string, rows: WorkLog[]) => void;
+function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schema, tasksApi, onDayChanged }: {
+  t: any; lang: Lang; profile: Profile; projects: Project[]; workLogs: WorkLog[]; logsLoaded: boolean; hasV4Schema: boolean; tasksApi: TasksApi; onDayChanged: (date: string, rows: WorkLog[]) => void;
 }) {
   const days = getLast45Days();
   const logsByDate = useMemo(() => {
@@ -977,7 +993,8 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
           hours: wl.hours || 0,
           manual: isManualProject(wl),
           category: wl.category || 'project',
-          description: wl.description || ''
+          description: wl.description || '',
+          task_id: wl.task_id ?? null
         });
       }
     }
@@ -991,6 +1008,12 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   const projectGroups = useMemo(() => groupLogsByProject(workLogs), [workLogs]);
   const recent = useMemo(() => recentProjects(workLogs, projects), [workLogs, projects]);
+  // Tasks offered on project entries: the person's own discipline first, then their recently logged tasks.
+  const taskCtx = useMemo<TaskContext | undefined>(() => {
+    if (!tasksApi.enabled) return undefined;
+    const recentIds = [...new Set([...workLogs].sort((a, b) => b.log_date.localeCompare(a.log_date)).map(w => w.task_id).filter((id): id is string => Boolean(id)))].slice(0, 5);
+    return { tasks: tasksApi.tasks, preferred: tasksApi.preferred, recentIds };
+  }, [tasksApi.enabled, tasksApi.tasks, tasksApi.preferred, workLogs]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [saving, setSaving] = useState(false);
   const [dateEntries, setDateEntries] = useState<EntryDraft[]>([newEntryDraft()]);
@@ -1005,7 +1028,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
     [logsByDate, formOpen, selectedDate], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const shotsApi = useScreenshots(shotDates, showAlert, t.maxScreenshots);
-  const keyOfEntry = (e: DayEntry) => entryKey({ category: e.category, project_id: e.project_id, custom_name: e.manual ? e.project_name : '', description: e.description });
+  const keyOfEntry = (e: DayEntry) => entryKey({ category: e.category, project_id: e.project_id, custom_name: e.manual ? e.project_name : '', description: e.description, task_id: e.task_id });
 
   // After "Tambah Proyek", bring the new row into view and put the cursor in its project field.
   useEffect(() => {
@@ -1035,7 +1058,10 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
       custom_name: e.manual ? e.project_name : '',
       custom_code: e.manual ? e.project_code : '',
       query: e.category !== 'project' ? '' : e.manual ? e.project_name : `${e.project_name} — ${e.project_code}`,
-      hours: String(e.hours)
+      hours: String(e.hours),
+      task_id: e.task_id || '',
+      // A step proposed earlier for this task and day, still waiting for approval, shows as chosen again.
+      progress: e.task_id ? tasksApi.proposals.find(p => p.user_id === profile.id && p.log_date === date && p.task_id === e.task_id && p.status === 'pending')?.to_progress ?? null : null,
     }));
     setDateEntries(entries.length ? entries : [newEntryDraft()]);
     setSelectedDate(date);
@@ -1089,7 +1115,13 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
       if (!isDraftReady(e)) { showAlert(lang === 'id' ? 'Masukkan jam kerja yang valid.' : 'Enter valid work hours.'); return; }
     }
     setSaving(true);
-    const saved = await saveDay(supabase, profile.id, selectedDate, dateEntries.map(draftToEntry), hasV4Schema);
+    const saved = await saveDay(supabase, profile.id, selectedDate, dateEntries.map(draftToEntry), hasV4Schema, tasksApi.enabled);
+    if (!saved.error) {
+      const proposalError = await tasksApi.saveDayProposals(selectedDate, dateEntries.map(e => ({
+        task_id: e.category === 'project' && e.project_id && e.task_id ? e.task_id : null, progress: e.progress, description: e.description,
+      })));
+      if (proposalError) showAlert(proposalError);
+    }
     setSaving(false);
     if (saved.error) showAlert(saved.error);
     else { setFormOpen(false); onDayChanged(selectedDate, saved.rows); }
@@ -1160,7 +1192,7 @@ function UserView({ t, lang, profile, projects, workLogs, logsLoaded, hasV4Schem
                       const key = ready ? entryKey(entry) : '';
                       const upload = (files: File[]) => void shotsApi.upload(selectedDate, key, files);
                       return (
-                        <EntryFields t={t} entry={entry} projects={projects} recent={recent} hasV4Schema={hasV4Schema}
+                        <EntryFields t={t} entry={entry} projects={projects} recent={recent} hasV4Schema={hasV4Schema} taskCtx={taskCtx}
                           onChange={patch => updateEntry(entry.tempId, patch)}
                           onPasteFiles={ready ? upload : undefined}
                           extra={ready
@@ -1299,8 +1331,22 @@ function AdminView({
   onAddUser, onEditUser, onDeleteUser, onUpdateRole,
   showCheckHours, setShowCheckHours, checkHoursDetail, setCheckHoursDetail,
   showAdminLogs, setShowAdminLogs, showAdminSettings, setShowAdminSettings,
-  adminSettings, onSaveSettings, currentProfile,
+  adminSettings, onSaveSettings, currentProfile, tasksApi,
 }: any) {
+  const tasks: TasksApi = tasksApi;
+  const [tasksProjectId, setTasksProjectId] = useState<string | null>(null);
+  const tasksProject = projects.find((p: Project) => p.id === tasksProjectId);
+  const progressByProject = useMemo(() => {
+    const m = new Map<string, number | null>();
+    for (const p of projects as Project[]) m.set(p.id, projectProgress(tasks.tasks.filter(x => x.project_id === p.id)).overall);
+    return m;
+  }, [projects, tasks.tasks]);
+  const pendingByTask = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of tasks.proposals) if (p.status === 'pending') m.set(p.task_id, (m.get(p.task_id) ?? 0) + 1);
+    return m;
+  }, [tasks.proposals]);
+  const loggedTaskIds = useMemo(() => new Set((workLogs as WorkLog[]).map(w => w.task_id).filter((id): id is string => Boolean(id))), [workLogs]);
   const totalHours = workLogs.filter((w: WorkLog) => !w.is_leave).reduce((s: number, w: WorkLog) => s + (w.hours || 0), 0);
   const manualGroups = useMemo(() => manualProjectGroups(workLogs, projects), [workLogs, projects]);
   const exportMonths = getExportMonths();
@@ -1418,7 +1464,18 @@ function AdminView({
         <RecordsTable t={t} lang={lang} records={records} sortBy={sortBy} />
       </div>
 
-      <ProjectList t={t} projects={projects} onCreate={onCreate} onEdit={onEdit} onToggleActive={onToggleActive} onDelete={onDelete} />
+      {tasks.enabled && (
+        <ProgressReviewList t={t} lang={lang} proposals={tasks.proposals} tasks={tasks.tasks} projects={projects} workLogs={workLogs}
+          userName={(id: string) => users.find((u: Profile) => u.id === id)?.full_name || '—'} onReview={tasks.review} />
+      )}
+      <ProjectList t={t} projects={projects} onCreate={onCreate} onEdit={onEdit} onToggleActive={onToggleActive} onDelete={onDelete}
+        onTasks={tasks.enabled ? (p: Project) => setTasksProjectId(id => (id === p.id ? null : p.id)) : undefined}
+        progressOf={tasks.enabled ? (p: Project) => progressByProject.get(p.id) ?? null : undefined} />
+      {tasks.enabled && tasksProject && (
+        <ProjectTasksPanel t={t} project={tasksProject} tasks={tasks.tasks} pendingByTask={pendingByTask} loggedTaskIds={loggedTaskIds}
+          onSave={tasks.saveTask} onReorder={tasks.reorder} onDelete={tasks.deleteTask} onSetProgress={tasks.setProgress}
+          onClose={() => setTasksProjectId(null)} />
+      )}
       <ManualProjectList t={t} groups={manualGroups} projects={projects} onMerge={onMergeManual} />
 
       <EmployeeList t={t} users={visibleEmployeeUsers} currentId={currentProfile?.id} isLocked={(u: Profile) => Boolean(u.dev_access) && !isDeveloperEmail(u.email)}

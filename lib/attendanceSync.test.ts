@@ -55,3 +55,11 @@ describe('mapLimit', () => {
     expect(peak).toBe(2);
   });
 });
+
+describe('divisionUpdates', () => {
+  it('lists only people whose department changed', async () => {
+    const { divisionUpdates } = await import('./attendanceSync');
+    expect(divisionUpdates(new Map([['u1', 'Automation'], ['u2', 'Process'], ['u3', null]]), new Map([['u1', 'Automation'], ['u2', null], ['u3', 'Process']])))
+      .toEqual([{ id: 'u2', division: 'Process' }]);
+  });
+});

@@ -13,6 +13,7 @@ export type AttendanceDay = {
   lastOut: string | null;
   tz: string;
   leave: LeaveType | null;    // approved leave on that date
+  department?: string | null; // the person's department, when the attendance function sends it
 };
 
 export type HoursRow = { first_in: string | null; last_out: string | null; regular_hours: number | string | null; overtime_hours: number | string | null; tz: string | null };
@@ -42,9 +43,10 @@ export const notMatched = (date: string): AttendanceDay =>
 
 // The attendance function's reply: { matched, hours: HoursRow[], leaves: LeaveRow[] }.
 export function fromAttendanceReply(date: string, reply: unknown): AttendanceDay {
-  const r = (reply ?? {}) as { matched?: boolean; hours?: HoursRow[]; leaves?: LeaveRow[] };
+  const r = (reply ?? {}) as { matched?: boolean; department?: unknown; hours?: HoursRow[]; leaves?: LeaveRow[] };
   if (!r.matched) return notMatched(date);
-  return summarizeDay(date, Array.isArray(r.hours) ? r.hours : [], Array.isArray(r.leaves) ? r.leaves : []);
+  const day = summarizeDay(date, Array.isArray(r.hours) ? r.hours : [], Array.isArray(r.leaves) ? r.leaves : []);
+  return typeof r.department === 'string' ? { ...day, department: r.department } : day;
 }
 
 // Clocked in but no clock-out: the day is still open (or the clock-out was forgotten),

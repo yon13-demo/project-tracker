@@ -2,7 +2,8 @@
 -- Run in the ATTENDANCE Supabase project's SQL Editor, NOT in Weave's.
 --
 -- Gives Weave one narrow, read-only door into attendance:
---   public.weave_attendance_day(email, date, code) → clock times, hours and leave for ONE person on ONE date.
+--   public.weave_attendance_day(email, date, code) → clock times, hours and leave for ONE person on ONE date,
+--   plus that person's department (to sort Weave's task list by discipline).
 -- Weave calls it with the attendance project's anon/publishable key plus an access code.
 -- The anon key alone cannot call it, and the code only unlocks this function — no tables, no salaries, no writes.
 -- Safe to run again; existing data is not touched.
@@ -41,7 +42,7 @@ end;
 $$;
 revoke all on function weave_private.rotate_code() from public, anon, authenticated;
 
--- One person (by email), one date. Returns { matched, hours: [...], leaves: [...] }.
+-- One person (by email), one date. Returns { matched, department, hours: [...], leaves: [...] }.
 create or replace function public.weave_attendance_day(p_email text, p_date date, p_code text) returns jsonb
 language plpgsql
 stable
@@ -51,6 +52,7 @@ as $$
 declare
   v_email text := lower(trim(coalesce(p_email, '')));
   v_badge text;
+  v_department text;
 begin
   if p_code is null or not exists (
     select 1 from weave_private.access a
@@ -64,7 +66,7 @@ begin
   end if;
 
   -- Main or work email (active employee first), then the alias table.
-  select e.badge_number into v_badge
+  select e.badge_number, e.department into v_badge, v_department
   from public.employees e
   where lower(trim(e.email)) = v_email or lower(trim(e.work_email)) = v_email
   order by e.active desc nulls last
@@ -75,6 +77,7 @@ begin
     from public.employee_emails ee
     where lower(trim(ee.email)) = v_email
     limit 1;
+    select e.department into v_department from public.employees e where e.badge_number = v_badge limit 1;
   end if;
 
   if v_badge is null then
@@ -83,6 +86,7 @@ begin
 
   return jsonb_build_object(
     'matched', true,
+    'department', v_department,
     'hours', coalesce((
       select jsonb_agg(jsonb_build_object(
         'first_in', h.first_in, 'last_out', h.last_out,
