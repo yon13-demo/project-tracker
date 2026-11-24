@@ -1,8 +1,11 @@
 # Weave TV Dashboard: build spec
 
-One 1920×1080 screen for a 55" TV in a slideshow. It shows how the team's work hours are spread across projects this week, whether yesterday's work was reported, and how logged hours compare with the attendance clock.
+Two 1920×1080 slides for a 55" TV in a slideshow, about 30 seconds each:
 
-The page makes **one database call**, `weave_dashboard`, with the publishable key. Every total, average, % and ranking is computed inside the database, so the page only displays values. The response contains **no personal data**: no names, emails, badge numbers or per-person figures. Project numbers and names, client names included, are shown on purpose.
+1. **Ringkasan (overview):** how the team's hours are spread across projects this week, whether yesterday's work was reported, project progress, and logged hours against the attendance clock. Sections 1–11. It's live at `/dashboard`.
+2. **Beban kerja (workload swimlane):** which type of work runs on which project and when, and where projects overlap for the same engineers. It's the slide-4 view from the "Swimlane Progress" deck. Section 12. For now it comes with **demo data**; the live data source is in §12.7.
+
+The page makes **one database call**, `weave_dashboard`, with the publishable key. Every total, average, % and ranking is computed inside the database, so the page only displays values. The response contains **no personal data**: no names, emails, badge numbers or per-person figures. Slide 2 describes people by role ("1 Automation Engineer"), never by name. Project numbers and names, client names included, are shown on purpose.
 
 ---
 
@@ -211,25 +214,66 @@ A realistic example for Wed 2026-11-25, 23 people:
 
 Rates are always recalculated from their sums. Never average percentages from different periods.
 
-## 6. Screen layout (1920×1080, no scrolling)
+## 6. Screen layout: slide 1, Ringkasan (1920×1080, no scrolling)
 
-A 12-column grid with 32 px padding and 24 px gaps. Row heights: header 88 px, KPI row 220 px, main row 440 px, bottom row 228 px.
+This is the page as built (`app/dashboard/page.tsx`). It's dark by default; `?theme=light` gives a light screen.
 
-| # | Section | Position | Fields | Chart | Colour / alert rules |
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│ Weave  Minggu 48 · Rabu, 25 November 2026                       Diperbarui 09:12   14:46 │
+├────────────────────┬────────────────────┬────────────────────┬───────────────────────────┤
+│ Lapor kemarin      │ Jam minggu ini     │ Jam bulan ini      │ Absensi hari ini          │
+│ ◔83%  19/23        │ 313 jam            │ 2.140 jam          │ 20     20      1    2     │
+│ ! target 90%       │ ▲ 4,9% vs minggu   │ ▼ 3,4% vs bulan    │ Masuk  Kantor  Cuti ! Belum│
+├────────────────────┴────────────────────┴──────┬─────────────┴───────────────────────────┤
+│ Progres proyek (dari tugas yang disetujui)     │ Top proyek bulan ini (jam)              │
+│ ┌ 2260301 Montreal … 81% ┐ ┌ 2260504 Paragon 39% ┐│ 2260301 Montreal ████████████ 611 · 9 org│
+│ │ ███████████████░░░     │ │ ███████░░░░░░░░░░    ││ 2260101 Powder   ██████████   544 · 7 org│
+│ │ Process     ███░  72%  │ │ Process   ████░  55% ││ …                                        │
+│ │ Mechanical  █████ 97%  │ │ Elec & A. ██░░░  22% ││ Proyek lain ▒                     42    │
+│ │ Elec & A.   ████░ 74%  │ │ 7/42 tugas · 402 jam ││ (Entri manual: 9 entri · 2,6%)          │
+│ │ 60/137 · 611 jam · !2  │ └──────────────────────┘│                                          │
+├────────────────────────┴────────┬────────────────┴───────┬────────────────────────────────┤
+│ Jam per minggu (8 minggu)       │ Kategori minggu ini    │ Tercatat vs absensi            │
+│ ▆ ▆ ▇ ▆ ▇ ▇ ▆ ▨                 │ ████████▌▍▌ + legend   │ ! 89%  Absensi ███ 372 j       │
+│ M41 … M48*                      │                        │        Tercatat ██ 332 j       │
+└─────────────────────────────────┴────────────────────────┴────────────────────────────────┘
+```
+
+**Grid:** a 12-column grid with 1em gaps. Rows are header, KPI, main (1.55 fr) and bottom (1 fr). The base font is `clamp(13px, 0.92vw, 24px)`, which is about 18 px on a 1920-wide TV, and every size is in `em`, so the layout scales with the window. Below 1100 px wide the panels stack and the page scrolls.
+
+| # | Section | Columns | Fields | Chart | Colour / alert rules |
 |---|---|---|---|---|---|
-| 0 | Header | full width | `periods.week.iso_week`, `date`, `attendance.today.synced_at`, `generated_at` | text: "Weave · Minggu 48 · Rabu, 25 Nov 2026 · diperbarui 09:12" | Muted text. If `attendance.today.is_stale`, show an amber "Absensi belum diperbarui sejak HH:MM" badge with an icon. |
-| 1 | Lapor kemarin | KPI 1 (3 cols) | `reporting.reported`, `expected`, `rate_pct`, `target_pct`, `date` | progress ring + "19 / 23" | Ring green when `rate_pct ≥ 90`, amber 70–89.9, red < 70. Subtitle "Senin, 24 Nov". |
-| 2 | Jam minggu ini | KPI 2 (3 cols) | `hours.week`, `week_change_pct` | hero number + delta | Delta ▲ green when > 0, ▼ red when < 0, grey "—" when null. Note "sampai hari ini". |
-| 3 | Jam bulan ini | KPI 3 (3 cols) | `hours.month`, `month_change_pct` | hero number + delta | Same rule as #2 |
-| 4 | Streak tim | KPI 4 (3 cols) | `reporting.streak_days` | hero number + "hari kerja" | Green when ≥ 5, neutral 1–4, grey "0 · mulai lagi hari ini" when 0 |
-| 5 | Top proyek bulan ini | main, 7 cols | `top_projects_month[]`, `other_projects_month_hours` | horizontal bars, max 8 + one grey "Proyek lain" bar | Single hue (sequential, not one colour per project). Label: code in bold, name, hours on the right, "· 9 orang" muted. Names longer than one line are truncated with "…". |
-| 6 | Kategori minggu ini | main, 5 cols, top | `categories_week[]` | one 100% stacked bar + legend with hours and % | Fixed colours per category (same as the Weave app: Proyek, Quotation, Training, Lainnya). Hidden segments < 1%. |
-| 7 | Absensi hari ini | main, 5 cols, bottom | `attendance.today.*` | 4 numbers in a row: Masuk · Masih di kantor · Cuti · Belum absen | "Belum absen" amber when > 0 after 09:00 WIB. Whole block 50% opacity + stale badge when `is_stale`. |
-| 8 | Jam per minggu | bottom, 8 cols | `weekly_trend[]` | column chart, 8 weeks | Past weeks solid, current week (`partial`) hatched/outlined with a "berjalan" label. One axis only. |
-| 9 | Tercatat vs absensi | bottom, 4 cols | `attendance.comparison.*` | big % + two thin bars (clocked vs logged) | `coverage_pct` green ≥ 90, amber 75–89.9, red < 75. Subtitle "Senin–Selasa · 42 hari-orang · 3 belum lapor". |
-| 10 | Entri manual | footer chip inside #5 | `manual_projects_month.share_pct`, `entries` | small text chip | Amber when `share_pct` > 5 |
+| 0 | Header | full | `periods.week.iso_week`, `date`, `generated_at`, `attendance.today.synced_at` | "Weave · Minggu 48 · Rabu, 25 November 2026", "Diperbarui 09:12", and a large clock (updates every 30 s) | Amber badge "! Absensi belum diperbarui sejak HH:MM" when `is_stale`. Red badge "✕ Offline sejak HH:MM" when the last call failed. |
+| 1 | Lapor kemarin | 3 | `reporting.*` | ring + "19 / 23" + "Streak ≥90%: n hari kerja" | Ring and text green ✓ ≥ 90, amber ! 70–89.9, red ✕ < 70. |
+| 2 | Jam minggu ini | 3 | `hours.week`, `week_change_pct` | hero number + delta, note "sampai hari ini" | ▲ green when > 0, ▼ red when < 0, "—" grey when null. |
+| 3 | Jam bulan ini | 3 | `hours.month`, `month_change_pct` | hero number + delta, note "1 Nov – 25 Nov" | Same as #2. |
+| 4 | Absensi hari ini | 3 | `attendance.today.*` | 4 numbers: Masuk · Di kantor · Cuti · Belum absen | "Belum absen" amber with ! when > 0 after 09:00 WIB. Whole tile at 55% opacity when `is_stale`. |
+| 5 | Progres proyek | 7 | `project_progress[]` (§11) | one card per project, side by side (min 22em wide, so 2 per row): code, name, overall % in large type, a meter, then a thin bar per discipline with % | Single hue (`--chart-bar`). Footer "60 / 137 tugas selesai · 611 jam bulan ini". Amber badge "! n progres menunggu persetujuan" when `pending > 0`. 4 cards fit; more are cut off at the bottom, so show the top 4 on TV. |
+| 6 | Top proyek bulan ini | 5 | `top_projects_month[]`, `other_projects_month_hours`, `manual_projects_month` | horizontal bars: **code** name · bar · hours · "9 org"; a grey "Proyek lain" bar | Single hue; "Proyek lain" in `--chart-muted`. Chip "Entri manual: n entri · x% jam proyek", amber with ! when > 5%. |
+| 7 | Jam per minggu | 5 | `weekly_trend[]` | 8 columns with values on top, labels M41…M48 | Current week (`partial`) hatched and marked "*", with the footnote "* minggu berjalan, belum lengkap". |
+| 8 | Kategori minggu ini | 3 | `categories_week[]` | 100% stacked bar + legend (hours, %) | Fixed colours: Proyek `--series-1`, Quotation `--series-2`, Training `--series-3`, Lainnya `--series-4`. Segments < 1% are hidden from the bar but stay in the legend. |
+| 9 | Tercatat vs absensi | 4 | `attendance.comparison.*` | big % + two bars (Absensi grey, Tercatat blue) + "42 hari-orang · 3 belum lapor" | Green ✓ ≥ 90, amber ! 75–89.9, red ✕ < 75. |
 
-Status colours (green / amber / red) are always paired with an icon or text (▲ ▼ ✓ !), never colour alone. Minimum text size is 24 px; hero numbers are 96–120 px.
+**Colours:** status colours (green / amber / red) always come with a mark (✓ ! ✕ ▲ ▼), never colour alone. Theme tokens (dark / light):
+
+| Token | Dark | Light |
+|---|---|---|
+| `--bg` | `#0b1120` | `#f8fafc` |
+| `--card` | `#111827` | `#ffffff` |
+| `--ink` | `#f8fafc` | `#0f172a` |
+| `--muted` | `#94a3b8` | `#64748b` |
+| `--line` | `#334155` | `#e2e8f0` |
+| `--chart-bar` | `#6366f1` | `#4f46e5` |
+| `--chart-muted` | `#64748b` | `#64748b` |
+| `--success` | `#059669` | `#059669` |
+| `--warn` | `#d97706` | `#d97706` |
+| `--danger` | `#dc2626` | `#dc2626` |
+| `--series-1` | `#3987e5` | `#2a78d6` |
+| `--series-2` | `#d95926` | `#eb6834` |
+| `--series-3` | `#199e70` | `#1baf7a` |
+| `--series-4` | `#c98500` | `#eda100` |
+| `--series-7` | `#9085e9` | `#6250d6` |
 
 ## 7. Display rules
 
@@ -345,3 +389,222 @@ Since `schema-v9-dashboard-progress.sql`, the response also has `project_progres
 **Formula:** a task group's progress is the weighted average of its non-archived children (no weight = 1). A discipline is the weighted average of its deliverables. The project is the plain average of its disciplines. It's the same maths as the app (`lib/tasks.ts`).
 
 **Built page:** `/dashboard` (`app/dashboard/page.tsx`). Dark by default; add `?theme=light` for a light screen, or `?date=YYYY-MM-DD` to show a past day.
+
+## 12. Slide 2: Beban kerja (workload swimlane)
+
+This is the people view of the "Swimlane Progress Automation IFF, Paragon, Egypt Aminolat" deck (slide 4, the consolidated view).
+- **Rows (lanes):** a type of work, labelled with its staffing ("1 Automation Engineer | 3 proyek bersamaan").
+- **Sub-rows:** one per project.
+- **Bars:** the activity over the year.
+- **Bands:** amber where 2 projects run in the same lane at the same time, red where 3 do.
+- **Strips at the bottom:** how many projects and tasks are active together each month.
+
+**No names on the TV.** People appear only as role and count. A per-person version with names belongs in the admin page, not on this screen.
+
+### 12.1 Demo data
+
+Use this exactly until the live source exists (§12.7). The dates are the ones in the deck, as of 24 Nov 2026. Keep it in the page as `DEMO_WORKLOAD`, and show a small grey "Data contoh" badge in the header while it's used.
+
+```json
+{
+  "demo": true,
+  "title": "Beban kerja engineering",
+  "range": { "from": "2026-01-01", "to": "2026-12-31", "today": "2026-11-24", "unit": "month" },
+  "projects": [
+    { "key": "paragon",  "code": "2260504", "name": "Paragon",        "color": "series-1" },
+    { "key": "iff",      "code": null,      "name": "IFF",            "color": "series-7" },
+    { "key": "aminolat", "code": "2250304", "name": "Aminolat Egypt", "color": "series-3" }
+  ],
+  "lanes": [
+    {
+      "key": "process", "label": "Process Engineering", "division": "Process",
+      "staffing": "1 Process Engineer", "parallel_projects": 4, "parallel_note": "3 ditampilkan", "peak_overlap": 2,
+      "overlaps": [
+        { "from": "2026-01-08", "to": "2026-01-30", "count": 2 },
+        { "from": "2026-05-02", "to": "2026-06-29", "count": 2 }
+      ],
+      "items": [
+        { "project": "paragon",  "label": "PID",                 "from": "2026-05-02", "to": "2026-07-30", "status": "done" },
+        { "project": "paragon",  "label": "Process Description", "from": "2026-06-14", "to": "2026-10-31", "status": "done" },
+        { "project": "iff",      "label": "PID",                 "from": "2026-01-08", "to": "2026-04-29", "status": "done" },
+        { "project": "iff",      "label": "Process Description", "from": "2026-04-30", "to": "2026-06-29", "status": "done" },
+        { "project": "aminolat", "label": "PID",                 "from": "2026-01-03", "to": "2026-01-30", "status": "done" },
+        { "project": "aminolat", "label": "Process Description", "from": "2026-01-03", "to": "2026-01-30", "status": "done" }
+      ]
+    },
+    {
+      "key": "io_list", "label": "IO List", "division": "Automation",
+      "staffing": "1 Automation Engineer", "parallel_projects": 3, "parallel_note": null, "peak_overlap": 2,
+      "overlaps": [ { "from": "2026-07-24", "to": "2026-11-15", "count": 2 } ],
+      "items": [
+        { "project": "paragon", "label": "IO List dev / revisi", "note": "Rev.3 17 Nov", "from": "2026-06-01", "to": "2026-11-30", "status": "ongoing" },
+        { "project": "iff",     "label": "IO List",              "from": "2026-07-24", "to": "2026-11-15", "status": "done" }
+      ]
+    },
+    {
+      "key": "plc", "label": "PLC Programming", "division": "Automation",
+      "staffing": "2 Automation Engineer", "parallel_projects": 5, "parallel_note": null, "peak_overlap": 3,
+      "overlaps": [
+        { "from": "2026-10-29", "to": "2026-11-28", "count": 2 },
+        { "from": "2026-11-10", "to": "2026-11-24", "count": 3 }
+      ],
+      "items": [
+        { "project": "paragon",  "label": "HW config + function ladder", "note": "ad-hoc", "from": "2026-10-29", "to": null, "status": "ongoing" },
+        { "project": "iff",      "label": "HW config, PLC structure, network & IO map", "from": "2026-07-09", "to": "2026-08-27", "status": "done" },
+        { "project": "iff",      "label": "Preliminary ladder / sequence logic",        "from": "2026-08-07", "to": "2026-11-28", "status": "ongoing" },
+        { "project": "aminolat", "label": "HW config, PLC structure",                    "from": "2026-11-10", "to": "2026-12-04", "status": "ongoing" },
+        { "project": "aminolat", "label": "Prelim. ladder logic",                        "from": "2026-11-13", "to": "2026-12-01", "status": "ongoing" }
+      ]
+    },
+    {
+      "key": "hmi", "label": "HMI Programming", "division": "Automation",
+      "staffing": "PIC sama dengan PLC", "parallel_projects": 2, "parallel_note": null, "peak_overlap": 3,
+      "overlaps": [
+        { "from": "2026-11-10", "to": "2026-11-28", "count": 2 },
+        { "from": "2026-11-23", "to": "2026-11-24", "count": 3 }
+      ],
+      "items": [
+        { "project": "paragon",  "label": "HMI PID display",                   "from": "2026-11-10", "to": null,         "status": "ongoing" },
+        { "project": "iff",      "label": "HMI design overview",               "from": "2026-07-11", "to": "2026-10-13", "status": "done" },
+        { "project": "iff",      "label": "Screen templates, faceplates, nav", "from": "2026-09-18", "to": "2026-11-09", "status": "done" },
+        { "project": "iff",      "label": "Dynamic values / alarms",           "from": "2026-10-28", "to": "2026-12-05", "status": "ongoing" },
+        { "project": "aminolat", "label": "HMI design overview",               "from": "2026-11-23", "to": "2026-12-07", "status": "ongoing" },
+        { "project": "aminolat", "label": "Screen templates",                  "from": "2026-11-23", "to": "2026-12-07", "status": "ongoing" }
+      ]
+    },
+    {
+      "key": "fa", "label": "Functional Analysis", "division": "Automation",
+      "staffing": "Review Process + Automation", "parallel_projects": 1, "parallel_note": null, "peak_overlap": 1,
+      "overlaps": [],
+      "items": [
+        { "project": "paragon", "label": "FA Rev.0 (review Process)", "from": "2026-10-12", "to": "2026-10-22", "status": "done" }
+      ]
+    },
+    {
+      "key": "electrical", "label": "Electrical Document", "division": "Automation",
+      "staffing": "1 Electrical Engineer + 1 Drafter", "parallel_projects": 3, "parallel_note": "procurement & design", "peak_overlap": 3,
+      "overlaps": [
+        { "from": "2026-06-05", "to": "2026-11-06", "count": 2 },
+        { "from": "2026-06-08", "to": "2026-07-02", "count": 3 },
+        { "from": "2026-08-31", "to": "2026-09-30", "count": 3 }
+      ],
+      "items": [
+        { "project": "paragon",  "label": "Item List",                 "from": "2026-06-05", "to": "2026-11-19", "status": "done" },
+        { "project": "paragon",  "label": "Schematic Diagram",         "from": "2026-06-07", "to": "2026-09-30", "status": "done" },
+        { "project": "paragon",  "label": "Schematic Diagram (rev)",   "from": "2026-07-08", "to": "2026-10-31", "status": "done" },
+        { "project": "iff",      "label": "Item list dev / update",    "from": "2026-06-08", "to": "2026-11-06", "status": "done" },
+        { "project": "iff",      "label": "Schematic & panel docs",    "from": "2026-07-20", "to": "2026-11-06", "status": "done" },
+        { "project": "aminolat", "label": "Item list",                 "from": "2026-06-02", "to": "2026-07-02", "status": "done" },
+        { "project": "aminolat", "label": "Schematic & panel docs",    "from": "2026-08-31", "to": "2026-09-30", "status": "done" }
+      ]
+    }
+  ],
+  "concurrency": [
+    { "month": "2026-01", "projects": 2, "tasks": 3 },
+    { "month": "2026-02", "projects": 1, "tasks": 1 },
+    { "month": "2026-03", "projects": 1, "tasks": 1 },
+    { "month": "2026-04", "projects": 1, "tasks": 1 },
+    { "month": "2026-05", "projects": 2, "tasks": 2 },
+    { "month": "2026-06", "projects": 3, "tasks": 8 },
+    { "month": "2026-07", "projects": 3, "tasks": 11 },
+    { "month": "2026-08", "projects": 3, "tasks": 11 },
+    { "month": "2026-09", "projects": 3, "tasks": 12 },
+    { "month": "2026-10", "projects": 2, "tasks": 11 },
+    { "month": "2026-11", "projects": 3, "tasks": 9 },
+    { "month": "2026-12", "projects": 1, "tasks": 4 }
+  ]
+}
+```
+
+### 12.2 Fields
+
+| Field | Meaning | `null` means |
+|---|---|---|
+| `range.from/to` | The time axis, inclusive (WIB days) | never null |
+| `range.today` | Where the "today" line goes | never null |
+| `range.unit` | Column unit, `month` (a `week` view can come later) | never null |
+| `projects[].key/code/name` | Project identity; `color` names the series token for its bars | `code` null = not registered in Weave yet (show only the name) |
+| `lanes[].label` | Type of work: the row title | never null |
+| `lanes[].division` | Division of the people doing it (Process, Automation, …) | never null |
+| `lanes[].staffing` | Who, by role and count only, e.g. "2 Automation Engineer" | never null |
+| `lanes[].parallel_projects` | Projects this lane's people carry at the same time, all projects counted | never null |
+| `lanes[].parallel_note` | Extra text after the count, e.g. "3 ditampilkan" | nothing to add |
+| `lanes[].peak_overlap` | Most projects running in this lane at the same moment, within the range | never null |
+| `lanes[].overlaps[]` | Windows where `count` (2 or 3+) projects of this lane overlap | empty array = "Tidak ada overlap" |
+| `items[].project` | Key into `projects` | never null |
+| `items[].label` | What the work is (activity name) | never null |
+| `items[].note` | Short status, e.g. "Rev.3 17 Nov", "ad-hoc" | no note |
+| `items[].from` | Start day | never null |
+| `items[].to` | End day (planned, or the last day worked) | still going with no planned end: draw the bar up to today and fade it |
+| `items[].status` | `done` (ended before today) · `ongoing` (today is inside it) · `planned` (starts after today) | never null |
+| `concurrency[]` | Per month: distinct projects (any lane) and distinct tasks active together | never null |
+
+### 12.3 Screen layout (1920×1080, no scrolling)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Beban kerja engineering   Paragon · IFF · Aminolat Egypt        ■Paragon ■IFF ■Aminolat       │
+│ Status 24 Nov 2026 · [Data contoh]                    ▨ 2 proyek overlap  ▨ 3 proyek overlap │
+├───────────────────────────┬──────┬──────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬────┬────┤
+│ LANE / PIC                │ Jan  │ Feb  │ Mar │ Apr │ Mei │ Jun │ Jul │ Agu │ Sep │ Okt│ Nov│Des
+├───────────────────────────┼──────┴──────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴────┴──┊─┴───┤
+│ PROCESS ENGINEERING       │ Paragon            ██PID██████ ███Process Description███  ┊      │
+│ 1 Process Engineer        │ IFF     ████PID█████████ ██Proc. Desc.██                ┊      │
+│ 4 proyek bersamaan  ⚠ 2   │ Aminolat ██PID / Proc.Desc.                              ┊      │
+├───────────────────────────┼────────────────────────────────────────────────────────┊──────┤
+│ PLC PROGRAMMING           │ Paragon                                    ██HW config ad-hoc▸  │
+│ 2 Automation Engineer     │ IFF               ██HW config██ ████Preliminary ladder████┊█    │
+│ 5 proyek bersamaan  ⛔ 3   │ Aminolat                                         [▒3▒]████┊██   │
+├───────────────────────────┼────────────────────────────────────────────────────────┊──────┤
+│ …  IO List · HMI · Functional Analysis · Electrical Document                       ┊      │
+├───────────────────────────┼────────────────────────────────────────────────────────┊──────┤
+│ Proyek aktif bersamaan    │  2 │ 1 │ 1 │ 1 │ 2 │ 3 │ 3 │ 3 │ 3 │ 2 │ 3 │ 1                 │
+│ Tugas aktif bersamaan     │  3 │ 1 │ 1 │ 1 │ 2 │ 8 │ 11│ 11│ 12│ 11│ 9 │ 4                 │
+└───────────────────────────┴──────────────────────────────────────────────────────────────────┘
+                                                      ┊ = hari ini (24 Nov)
+```
+
+| # | Part | Size | Content | Rules |
+|---|---|---|---|---|
+| 0 | Header | full width, ~70 px | Title, project names, "Status 24 Nov 2026", "Data contoh" badge while `demo`; on the right a legend for the 3 projects and the 2 overlap bands | Legend always shown (3 series). |
+| 1 | Lane label column | 300 px | **LABEL** (caps, bold), `staffing`, "`parallel_projects` proyek bersamaan" (+ `parallel_note` in muted text), and an overlap badge: amber "! 2" or red "✕ 3" from `peak_overlap`, or a muted "Tidak ada overlap" | Badge text always has the mark plus the number. |
+| 2 | Month header | rest, 1 column per month | Jan … Des (Indonesian short months) | Thin vertical grid line per month in `--line`. |
+| 3 | Lanes | 6 lanes; each lane = its project sub-rows (only projects with items in that lane) | One sub-row per project: project name at the left edge (muted), bars on the timeline | Lane background alternates `--card` / `--bg`, 1 px `--line` between lanes. |
+| 4 | Bars | 18 px tall, radius 4 px | From `from` to `to` (or to today when `to` is null). Label inside the bar when it fits, otherwise to the right of it, in `--ink` text (never in the bar colour). `note` follows the label after " · ". | Colour = the project's series token. `done`: solid. `ongoing`: solid up to today, then 45° hatch to `to`, with a ▸ marker when `to` is null. `planned`: outline only, hatched. Bars of one project in one sub-row that overlap in time stack in two thin rows (9 px each) instead of covering each other. |
+| 5 | Overlap bands | full lane height, behind the bars | Each `overlaps[]` window: `--warn` at 18% opacity for 2, `--danger` at 18% for 3+. Small label at the top of the band: "2 proyek" / "3 proyek" | Bands sit behind the bars; the bar colours stay readable. |
+| 6 | Today line | full height of the lanes | 2 px dashed vertical line in `--ink` at `range.today`, with the label "Hari ini · 24 Nov" at the top | Not red, so it can't be confused with a 3-project overlap. |
+| 7 | Concurrency strips | 2 rows × 28 px | "Proyek aktif bersamaan" and "Tugas aktif bersamaan", one cell per month with the number in it | Projects cell: neutral at 1, amber with ! at 2, red with ✕ at 3+. Tasks cell: a single-hue ramp (lighter = fewer), with the number always written in the cell. |
+
+**Fitting on one screen:** the demo has 6 lanes and 15 project sub-rows. At 1080 px that's about 44 px per sub-row (18 px bar plus padding), which fits with the header and strips. With more than 18 sub-rows, shrink bars to 14 px; with more than 24, split into two slides (Process + Automation).
+
+### 12.4 Display rules
+
+- **Dates in labels:** "2 Mei – 30 Jul". Month names in Indonesian (Jan, Feb, Mar, Apr, Mei, Jun, Jul, Agu, Sep, Okt, Nov, Des).
+- **Bar position:** day-accurate, as (date − range.from) / (range.to − range.from) of the timeline width. Month columns are drawn to the real number of days in the month.
+- **Labels:** truncate with "…" when there's no room inside or to the right; the full text goes in the bar's `title` (on a laptop, hover shows it).
+- **Project colours** are fixed by the order of `projects[]`: series-1, series-7, series-3, then series-2, series-5, series-6. Amber and red are kept for overlaps only, never for a project.
+- **Empty lane** (no items for any project in the range): keep the label column and show "— tidak ada tugas —" in muted text across the timeline.
+
+### 12.5 Slideshow
+
+- **Rotation:** slide 1 (Ringkasan) 30 s, then slide 2 (Beban kerja) 30 s, then repeat. A 400 ms cross-fade, no motion beyond that.
+- **Rotation is off** when `?slide=1` or `?slide=2` is in the URL, which shows just that slide (for a laptop or for checking).
+- **Data:** both slides use the same 5-minute poll; slide 2 reads `workload` from the same response once it exists (§12.7), and `DEMO_WORKLOAD` until then.
+
+### 12.6 Empty state
+
+When `lanes` is empty: centre the text **"Belum ada data beban kerja"**, with "Muncul setelah proyek punya daftar tugas dan jadwal." under it, and keep the header.
+
+### 12.7 Where the live data will come from (not built yet)
+
+`weave_dashboard` will get a `workload` field with the same shape as §12.1, built in the database from:
+
+| Part | Source |
+|---|---|
+| Lanes | A fixed list of work types (Process Engineering, IO List, PLC, HMI, Functional Analysis, Electrical Document, …) that each project's task deliverables are mapped onto. **Still to be agreed.** |
+| Bars (`from`/`to`) | Planned dates from the Microsoft Project XML, and actual first/last day with logged hours on the task in Weave |
+| `note` | Short status note per task, kept by the PM in Weave |
+| `staffing` | Count of people by role (attendance `position`) who logged hours in the lane; roles and counts only |
+| `overlaps`, `parallel_projects`, `concurrency` | Calculated from the bars and the logged hours |
+
+Until then the TV shows the demo data with the "Data contoh" badge, so nobody mistakes it for live numbers.
