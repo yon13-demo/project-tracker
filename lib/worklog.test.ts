@@ -39,7 +39,7 @@ describe('isDraftReady', () => {
 describe('draftToEntry', () => {
   it('converts hours to a number and empty project id to null', () => {
     expect(draftToEntry({ ...newEntryDraft(), custom_name: 'X', hours: '1.5' })).toEqual(
-      entry({ custom_name: 'X', hours: 1.5 }),
+      { ...entry({ custom_name: 'X', hours: 1.5 }), task_id: null },
     );
   });
 });
@@ -70,7 +70,7 @@ describe('workLogToExistingEntry', () => {
     const e = workLogToExistingEntry({
       id: '1', user_id: 'u', log_date: 'd', project_id: null, hours: 2, is_leave: false, category: 'quotation', description: 'Pabrik',
     });
-    expect(e).toEqual({ category: 'quotation', project_id: null, custom_name: '', custom_code: '', description: 'Pabrik', hours: 2, label: 'Quotation: Pabrik', code: '' });
+    expect(e).toEqual({ category: 'quotation', project_id: null, custom_name: '', custom_code: '', description: 'Pabrik', hours: 2, label: 'Quotation: Pabrik', code: '', task_id: null });
   });
   it('labels project rows with the project name and code', () => {
     const e = workLogToExistingEntry({
@@ -269,5 +269,26 @@ describe('recentProjects', () => {
   it('stops at the limit', () => {
     const logs = ['p1', 'p2', 'p3'].map((id, i) => log(`2026-11-1${i}`, { project_id: id }));
     expect(recentProjects(logs, projects, 2).map(r => r.project_id)).toEqual(['p3', 'p2']);
+  });
+});
+
+describe('project tasks on entries', () => {
+  const entry = (patch: Partial<EntryInput>): EntryInput => ({ category: 'project', project_id: 'p1', custom_name: '', custom_code: '', description: '', hours: 1, ...patch });
+  it('keeps two tasks of one project apart but merges the same task', () => {
+    const merged = mergeSameProject([
+      entry({ task_id: 't1', hours: 3, description: 'a' }), entry({ task_id: 't2', hours: 4 }),
+      entry({ task_id: 't1', hours: 1, description: 'b' }), entry({ hours: 2 }), entry({ task_id: null, hours: 1 }),
+    ]);
+    expect(merged.map(e => [e.task_id ?? null, e.hours, e.description])).toEqual([['t1', 4, 'a\nb'], ['t2', 4, ''], [null, 3, '']]);
+  });
+  it('sends task_id only when the database has the column, and only for registered projects', () => {
+    const rows = [entry({ task_id: 't1' }), entry({ project_id: null, custom_name: 'X', task_id: 't9' }), entry({ category: 'training', project_id: null, task_id: 't9', description: 'x' })];
+    expect(buildWorkLogInserts('u', '2026-11-20', rows, true, true).map(r => (r as any).task_id)).toEqual(['t1', undefined, undefined]);
+    expect(buildWorkLogInserts('u', '2026-11-20', rows, true).every(r => !('task_id' in r))).toBe(true);
+  });
+  it('carries the task and proposed progress from a draft', () => {
+    const d = { ...newEntryDraft(), project_id: 'p1', query: 'x', task_id: 't1', progress: 0.5, hours: '2' };
+    expect(draftToEntry(d)).toMatchObject({ project_id: 'p1', task_id: 't1', hours: 2 });
+    expect(newEntryDraft()).toMatchObject({ task_id: '', progress: null });
   });
 });

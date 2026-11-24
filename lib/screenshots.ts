@@ -18,11 +18,15 @@ export function slug(text: string): string {
   return s || 'x';
 }
 
-export type KeySource = { category: WorkCategory; project_id: string | null; custom_name: string; description: string };
+export type KeySource = { category: WorkCategory; project_id: string | null; custom_name: string; description: string; task_id?: string | null };
 
 // Which entry of a day a screenshot belongs to.
 export function entryKey(e: KeySource): string {
-  if (e.category === 'project') return e.project_id ? `p-${slug(e.project_id)}` : `m-${slug(e.custom_name)}`;
+  if (e.category === 'project') {
+    if (!e.project_id) return `m-${slug(e.custom_name)}`;
+    // Entries with a task get their own folder; without a task the key stays as it always was.
+    return e.task_id ? `p-${slug(e.project_id)}-${slug(e.task_id).slice(0, 8)}` : `p-${slug(e.project_id)}`;
+  }
   const prefix = e.category === 'quotation' ? 'q' : e.category === 'other' ? 'o' : 't';
   return `${prefix}-${slug(e.description.split('\n')[0])}`;
 }
