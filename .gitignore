@@ -5,3 +5,6 @@ node_modules/
 creds.txt
 *.tsbuildinfo
 env.local
+
+# Client project files (Excel, MS Project): never commit
+ms-projects/
