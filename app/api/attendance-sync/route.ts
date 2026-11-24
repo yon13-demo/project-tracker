@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { attendanceConfigured, getAttendanceDay } from '@/lib/attendanceServer';
-import { jakartaToday, mapLimit, syncDates, toAttendanceRow, type AttendanceRow } from '@/lib/attendanceSync';
+import { divisionUpdates, jakartaToday, mapLimit, syncDates, toAttendanceRow, type AttendanceRow } from '@/lib/attendanceSync';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,15 +40,29 @@ export async function GET(request: NextRequest) {
   const jobs = [...emails].flatMap(([id, email]) => dates.map(date => ({ id, email, date })));
   const syncedAt = new Date().toISOString();
   let failed = 0;
+  const departments = new Map<string, string | null>();
   const rows = (await mapLimit(jobs, 8, async j => {
-    try { return toAttendanceRow(j.id, await getAttendanceDay(j.email, j.date), syncedAt); }
-    catch { failed++; return null; }
+    try {
+      const day = await getAttendanceDay(j.email, j.date);
+      if (day.department) departments.set(j.id, day.department);
+      return toAttendanceRow(j.id, day, syncedAt);
+    } catch { failed++; return null; }
   })).filter((r): r is AttendanceRow => Boolean(r));
 
   if (rows.length) {
     const { error } = await db.from('attendance_days').upsert(rows, { onConflict: 'user_id,work_date' });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  // Department → profiles.division (sorts the task picker). Skipped quietly before schema v7 adds the column.
+  if (departments.size) {
+    const { data: current, error } = await db.from('profiles').select('id,division').in('id', [...departments.keys()]);
+    if (!error) {
+      for (const u of divisionUpdates(departments, new Map((current ?? []).map(p => [p.id as string, (p.division as string | null) ?? null])))) {
+        await db.from('profiles').update({ division: u.division }).eq('id', u.id);
+      }
+    }
+  }
+
   // The dashboard shows "last synced"; only move it when the attendance system actually answered.
   if (failed < jobs.length) {
     await db.from('admin_settings').upsert({ key: 'attendance_synced_at', value: syncedAt, updated_at: syncedAt }, { onConflict: 'key' });

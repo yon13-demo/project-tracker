@@ -31,8 +31,10 @@ export async function POST(request: NextRequest) {
 
   const users = [...new Set(manual.map(r => r.user_id))];
   const dates = [...new Set(manual.map(r => r.log_date))];
-  const { data: linked, error: e2 } = await db.from('work_logs').select(COLS)
-    .eq('project_id', projectId).in('user_id', users).in('log_date', dates);
+  // Only the project's "no task" entry of that day can take the manual hours; entries for a task stay as they are.
+  const linkedQuery = () => db.from('work_logs').select(COLS).eq('project_id', projectId).in('user_id', users).in('log_date', dates);
+  let { data: linked, error: e2 } = await linkedQuery().is('task_id', null);
+  if (e2?.code === '42703') ({ data: linked, error: e2 } = await linkedQuery()); // before schema v7 there is no task_id
   if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
 
   const plan = planManualMerge(manual, (linked ?? []) as MergeRow[], projectId);

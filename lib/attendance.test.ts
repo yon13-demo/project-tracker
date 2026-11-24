@@ -88,3 +88,10 @@ describe('isClockOpen', () => {
     expect(isClockOpen(day(null, null))).toBe(false);
   });
 });
+
+describe('department in the attendance reply', () => {
+  it('keeps the department when the attendance function sends it', () => {
+    expect(fromAttendanceReply('2026-11-17', { matched: true, department: 'Automation', hours: [], leaves: [] }).department).toBe('Automation');
+    expect('department' in fromAttendanceReply('2026-11-17', { matched: true, hours: [], leaves: [] })).toBe(false);
+  });
+});

@@ -38,3 +38,8 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return out;
 }
+
+// Departments to write to profiles.division: only where the attendance system sent one and it differs.
+export function divisionUpdates(found: Map<string, string | null>, current: Map<string, string | null>): { id: string; division: string }[] {
+  return [...found].filter(([id, d]) => d && d !== (current.get(id) ?? null)).map(([id, d]) => ({ id, division: d! }));
+}

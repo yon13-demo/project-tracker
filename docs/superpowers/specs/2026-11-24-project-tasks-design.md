@@ -190,3 +190,12 @@ The attendance `employees.department` values are: Workshop, Process, Automation,
   - approve → progress and superseded
   - `project_progress` numbers match a hand count
 - **Browser:** a preview page with fake data for the picker, the progress row and the admin screens, at phone and desktop width. Nothing is saved to real data.
+
+## As built (2026-11-24)
+
+- **Progress maths runs in TypeScript, not SQL:** `lib/tasks.ts` (`rollupProgress`, `projectProgress`) for the admin views. The SQL `project_progress()` function moves to phase 2, together with the TV dashboard.
+- **Deleting tasks:** `work_logs.task_id` has no `on delete set null`. A task with logged hours can't be deleted, only archived, because nulling it could create two "no task" entries for one project and day. Deleting a project still removes everything.
+- **Proposal note:** an entry's description becomes the proposal's note.
+- **Day timer:** the timer has no task picker yet, so timer entries save without a task.
+- **Import:** `scripts/import_followup_xlsx.py` (Python/openpyxl, not Node). It numbers tasks by position, because Excel stores "2.10" as 2.1.
+- **Checked against the 2260301 workbook:** Mechanical 96.7% and Electrical & Automation 74.2% match. Process is 72% vs Excel's 76%, because Excel's Item Specification formula leaves out task 5.4 "Data Sheet".

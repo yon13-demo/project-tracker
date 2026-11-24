@@ -48,7 +48,12 @@ create table if not exists public.task_progress_updates (
 create unique index if not exists task_progress_one_pending on public.task_progress_updates (task_id, user_id, log_date) where status = 'pending';
 create index if not exists task_progress_task on public.task_progress_updates (task_id, created_at desc);
 
-alter table public.work_logs add column if not exists task_id uuid references public.project_tasks(id) on delete set null;
+-- A task with hours logged cannot be deleted (archive it instead); deleting the whole project still
+-- removes its entries and tasks together. ("set null" would turn two task entries of one day into two
+-- "no task" entries for the same project, which the one-per-day rule below refuses.)
+alter table public.work_logs add column if not exists task_id uuid;
+alter table public.work_logs drop constraint if exists work_logs_task_id_fkey;
+alter table public.work_logs add constraint work_logs_task_id_fkey foreign key (task_id) references public.project_tasks(id);
 alter table public.profiles add column if not exists division text;
 
 -- ─── One entry per person, day and project — or per task when a task is given ───

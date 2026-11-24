@@ -5,6 +5,10 @@ export type Discipline = 'process' | 'mechanical' | 'electrical_automation' | 'p
 // Fixed display order; phase 1 offers the first three for new tasks.
 export const DISCIPLINES: Discipline[] = ['process', 'mechanical', 'electrical_automation', 'procurement', 'manufacturing', '3d'];
 export const ENGINEERING_DISCIPLINES: Discipline[] = ['process', 'mechanical', 'electrical_automation'];
+export const DISCIPLINE_LABEL: Record<Discipline, string> = {
+  process: 'Process', mechanical: 'Mechanical', electrical_automation: 'Electrical & Automation',
+  procurement: 'Procurement', manufacturing: 'Manufacturing', '3d': '3D',
+};
 
 export type ProjectTask = {
   id: string; project_id: string; parent_id: string | null; discipline: Discipline;
@@ -18,6 +22,9 @@ export type ProgressProposal = {
   status: 'pending' | 'approved' | 'rejected' | 'superseded';
   reviewed_at: string | null; review_note: string | null; created_at: string;
 };
+
+// What an entry form needs to offer tasks: all tasks, the person's preferred discipline, their recent tasks.
+export type TaskContext = { tasks: ProjectTask[]; preferred: Discipline | null; recentIds: string[] };
 
 export const TASK_COLUMNS = 'id,project_id,parent_id,discipline,wbs,name,doc_type,weight,sort_order,progress,archived_at';
 export const PROPOSAL_COLUMNS = 'id,task_id,user_id,log_date,from_progress,to_progress,note,status,reviewed_at,review_note,created_at';

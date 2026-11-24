@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { GitMerge, Pencil, Plus, ToggleLeft, ToggleRight, Trash2, UserPlus } from 'lucide-react';
+import { GitMerge, Pencil, Plus, ToggleLeft, ToggleRight, Trash2, UserPlus, ListTree } from 'lucide-react';
 import { filterPeople, filterProjects, isAdminLike, type ProjectStatusFilter, type RoleFilter } from '@/lib/adminLists';
 import type { ManualGroup } from '@/lib/manualMerge';
 import type { Project } from '@/lib/worklog';
@@ -20,9 +20,11 @@ function Segmented<V extends string>({ value, options, onChange }: { value: V; o
   );
 }
 
-export function ProjectList({ t, projects, onCreate, onEdit, onToggleActive, onDelete }: {
+export function ProjectList({ t, projects, onCreate, onEdit, onToggleActive, onDelete, onTasks, progressOf }: {
   t: any; projects: Project[];
   onCreate: () => void; onEdit: (p: Project) => void; onToggleActive: (p: Project) => void; onDelete: (p: Project) => void;
+  onTasks?: (p: Project) => void; // open the project's task list (schema v7)
+  progressOf?: (p: Project) => number | null;
 }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<ProjectStatusFilter>('active');
@@ -51,11 +53,13 @@ export function ProjectList({ t, projects, onCreate, onEdit, onToggleActive, onD
               <tr key={p.id} className={p.is_active ? '' : 'is-inactive'}>
                 <td className="col-code"><span className="code-badge">{p.project_code}</span></td>
                 <td>
-                  <div className="list-main">{p.name}{!p.is_active && <span className="status-badge inactive">{t.inactive}</span>}</div>
+                  <div className="list-main">{p.name}{!p.is_active && <span className="status-badge inactive">{t.inactive}</span>}
+                    {progressOf && progressOf(p) != null && <span className="progress-chip" title={t.progress}>{Math.round(progressOf(p)! * 100)}%</span>}</div>
                   {(p.company || p.description) && <div className="list-sub">{[p.company, p.description].filter(Boolean).join(' · ')}</div>}
                 </td>
                 <td className="col-actions">
                   <div className="list-actions">
+                    {onTasks && <button className="btn-action icon" onClick={() => onTasks(p)} title={t.tasksTitle} aria-label={t.tasksTitle}><ListTree size={14} /></button>}
                     <button className="btn-action icon" onClick={() => onEdit(p)} title={t.edit} aria-label={t.edit}><Pencil size={14} /></button>
                     <button className={`btn-action icon ${p.is_active ? 'deactivate' : 'activate'}`} onClick={() => onToggleActive(p)}
                       title={p.is_active ? t.deactivate : t.activate} aria-label={p.is_active ? t.deactivate : t.activate}>
