@@ -60,6 +60,8 @@ as $$
 declare
   n int; distinct_ids int; matching int; task_hours numeric;
 begin
+  -- A bulk insert where some rows have no "tasks" key sends NULL for them: that means no tasks.
+  new.tasks := coalesce(new.tasks, '[]'::jsonb);
   if new.task_id is not null then
     new.tasks := coalesce(new.tasks, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('task_id', new.task_id, 'hours', null));
     new.task_id := null;

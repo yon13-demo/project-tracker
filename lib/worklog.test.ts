@@ -285,7 +285,10 @@ describe('tasks on a project entry', () => {
   });
   it('sends the task list only when the database has it, and only for registered projects', () => {
     const rows = [entry({ tasks: [{ task_id: 't1', hours: null }] }), entry({ project_id: null, custom_name: 'X', tasks: [{ task_id: 't9', hours: null }] }), entry({})];
-    expect(buildWorkLogInserts('u', '2026-11-20', rows, true, true).map(r => (r as any).tasks)).toEqual([[{ task_id: 't1', hours: null }], undefined, []]);
+    // Every row carries "tasks": a bulk insert would send NULL for rows without the key (a quotation next to a project).
+    expect(buildWorkLogInserts('u', '2026-11-20', rows, true, true).map(r => (r as any).tasks)).toEqual([[{ task_id: 't1', hours: null }], [], []]);
+    const mixed = buildWorkLogInserts('u', '2026-11-23', [entry({ hours: 6 }), entry({ category: 'quotation', project_id: null, hours: 2 })], true, true);
+    expect(mixed.map(r => (r as any).tasks)).toEqual([[], []]);
     expect(buildWorkLogInserts('u', '2026-11-20', rows, true).every(r => !('tasks' in r))).toBe(true);
   });
   it('turns draft tasks into entry tasks: empty hours become null, drafts start without tasks', () => {

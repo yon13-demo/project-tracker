@@ -70,10 +70,13 @@ export function buildWorkLogInserts(userId: string, date: string, entries: Entry
   return entries.map(e => ({
     user_id: userId, log_date: date, hours: e.hours, is_leave: false,
     ...(hasV4Schema ? { category: e.category, description: e.description.trim() || null } : {}),
+    // Every row gets "tasks" (empty when not a registered project): in a bulk insert, rows without
+    // the key would be sent as NULL, which the database refuses.
+    ...(hasTasks ? { tasks: e.category === 'project' && e.project_id ? e.tasks ?? [] : [] } : {}),
     ...(e.category !== 'project'
       ? { project_id: null }
       : e.project_id
-        ? { project_id: e.project_id, ...(hasTasks ? { tasks: e.tasks ?? [] } : {}) }
+        ? { project_id: e.project_id }
         : { project_id: null, custom_project_name: e.custom_name.trim(), custom_project_code: e.custom_code.trim() || null }),
   }));
 }
